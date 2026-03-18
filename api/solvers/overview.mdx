@@ -11,6 +11,9 @@ description: PyBaMM provides several solver backends suited to different model t
 | `IDAKLUSolver` | SUNDIALS IDA + KLU | Yes | Yes | Yes | Fastest for most problems; recommended default |
 | `ScipySolver` | SciPy `solve_ivp` | Yes | No | No | Simple; no DAE support |
 | `JaxSolver` | JAX | Yes | BDF only | No | GPU/TPU capable; requires Python ≥ 3.11 |
+| `AlgebraicSolver` | SciPy root-finding | No | Algebraic only | No | For purely algebraic (steady-state) problems |
+| `CompositeSolver` | Multiple backends | Yes | Yes | Varies | Tries multiple solvers until one succeeds |
+| `CasadiAlgebraicSolver` | CasADi | No | Algebraic only | No | CasADi-based algebraic solver |
 
 ---
 

@@ -66,11 +66,11 @@ v_at_t = voltage(t=1800)  # interpolate at t = 1800 s
   Human-readable reason the solver stopped, e.g. `"final time"`, `"event: Minimum voltage"`, or `"event: Maximum voltage"`.
 </ResponseField>
 
-<ResponseField name="solve_time" type="datetime.timedelta">
-  Wall-clock time spent inside the solver.
+<ResponseField name="solve_time" type="pybamm.TimerTime">
+  Wall-clock time spent inside the solver. Prints as a human-readable string (e.g. `"1.234 s"`).
 </ResponseField>
 
-<ResponseField name="set_up_time" type="datetime.timedelta">
+<ResponseField name="set_up_time" type="pybamm.TimerTime">
   Wall-clock time spent building and discretising the model.
 </ResponseField>
 

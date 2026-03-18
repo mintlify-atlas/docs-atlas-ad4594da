@@ -23,16 +23,17 @@ When no arguments are provided, `Simulation` uses the model's defaults for geome
 ```python
 sim = pybamm.Simulation(
     model,
-    experiment=None,          # pybamm.Experiment or string or list of steps
-    geometry=None,            # pybamm.Geometry (defaults to model.default_geometry)
-    parameter_values=None,    # pybamm.ParameterValues
-    submesh_types=None,       # dict of submesh types per subdomain
-    var_pts=None,             # dict of mesh resolution per variable
-    spatial_methods=None,     # dict of spatial discretisation methods
-    solver=None,              # pybamm.BaseSolver
-    output_variables=None,    # list of variables to plot by default
-    C_rate=None,              # convenience: set current as a C-rate
-    discretisation_kwargs=None,
+    experiment=None,              # pybamm.Experiment or string or list of steps
+    geometry=None,                # pybamm.Geometry (defaults to model.default_geometry)
+    parameter_values=None,        # pybamm.ParameterValues
+    submesh_types=None,           # dict of submesh types per subdomain
+    var_pts=None,                 # dict of mesh resolution per variable
+    spatial_methods=None,         # dict of spatial discretisation methods
+    solver=None,                  # pybamm.BaseSolver
+    output_variables=None,        # list of variables to plot by default
+    C_rate=None,                  # convenience: set current as a C-rate
+    discretisation_kwargs=None,   # extra kwargs forwarded to pybamm.Discretisation
+    cache_esoh=True,              # cache eSOH solver between calls
 )
 ```
 
