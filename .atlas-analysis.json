@@ -1,0 +1,160 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "PyBaMM",
+  "projectDescription": "An open-source Python library for fast and flexible physics-based battery mathematical modelling and simulation.",
+  "theme": "palm",
+  "primaryColor": "#f4dd5e",
+  "lightColor": "#4278a3",
+  "darkColor": "#9abcb4",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/models",
+              "guides/simulations",
+              "guides/experiments",
+              "guides/parameters",
+              "guides/solvers",
+              "guides/plotting"
+            ]
+          },
+          {
+            "group": "Battery Models",
+            "pages": [
+              "models/lithium-ion",
+              "models/lead-acid",
+              "models/equivalent-circuit",
+              "models/sodium-ion"
+            ]
+          },
+          {
+            "group": "Advanced Usage",
+            "pages": [
+              "advanced/custom-models",
+              "advanced/spatial-methods",
+              "advanced/batch-study",
+              "advanced/callbacks"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/simulation",
+              "api/experiment",
+              "api/solution"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/base-model",
+              "api/models/lithium-ion",
+              "api/models/lead-acid",
+              "api/models/equivalent-circuit"
+            ]
+          },
+          {
+            "group": "Parameters",
+            "pages": [
+              "api/parameters/parameter-values",
+              "api/parameters/parameter-sets"
+            ]
+          },
+          {
+            "group": "Solvers",
+            "pages": [
+              "api/solvers/overview",
+              "api/solvers/casadi",
+              "api/solvers/scipy",
+              "api/solvers/idaklu",
+              "api/solvers/jax"
+            ]
+          },
+          {
+            "group": "Spatial Methods & Mesh",
+            "pages": [
+              "api/spatial-methods",
+              "api/mesh"
+            ]
+          },
+          {
+            "group": "Plotting",
+            "pages": [
+              "api/plotting"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/batch-study",
+              "api/callbacks",
+              "api/citations"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Physics-based lithium-ion battery models (SPM, SPMe, DFN, MPM, MSMR)",
+    "Lead-acid and sodium-ion battery model support",
+    "Equivalent circuit models (Thevenin, ECM)",
+    "Flexible experiment definition with CC, CV, and rest steps",
+    "Multiple solvers: CasADi, IDAKLU, SciPy, JAX",
+    "Rich parameter sets from published literature (Chen2020, Marquis2019, OKane2022, etc.)",
+    "Built-in plotting and visualization tools",
+    "BatchStudy for parameter sweeps and sensitivity analysis",
+    "Extensible submodel architecture for custom physics",
+    "Support for 1D, 2D and 3D spatial discretisations"
+  ],
+  "publicApiSurface": [
+    "pybamm.Simulation",
+    "pybamm.Experiment",
+    "pybamm.lithium_ion.DFN",
+    "pybamm.lithium_ion.SPM",
+    "pybamm.lithium_ion.SPMe",
+    "pybamm.lithium_ion.MPM",
+    "pybamm.lithium_ion.MSMR",
+    "pybamm.lead_acid",
+    "pybamm.equivalent_circuit",
+    "pybamm.sodium_ion",
+    "pybamm.ParameterValues",
+    "pybamm.CasadiSolver",
+    "pybamm.IDAKLUSolver",
+    "pybamm.ScipySolver",
+    "pybamm.JaxSolver",
+    "pybamm.BatchStudy",
+    "pybamm.QuickPlot",
+    "pybamm.Solution",
+    "pybamm.Geometry",
+    "pybamm.Mesh",
+    "pybamm.Discretisation",
+    "pybamm.print_citations",
+    "pybamm.callbacks",
+    "pybamm.parameter_sets"
+  ]
+}
