@@ -1,0 +1,112 @@
+---
+title: "Installation"
+description: "Install PyBaMM on Linux, macOS, or Windows using pip or conda."
+---
+
+PyBaMM is available on GNU/Linux, macOS, and Windows. It requires **Python 3.10–3.14**.
+
+## Install PyBaMM
+
+<CodeGroup>
+
+```bash pip
+pip install pybamm
+```
+
+```bash conda
+conda install -c conda-forge pybamm
+```
+
+</CodeGroup>
+
+All required dependencies (NumPy, SciPy, CasADi, etc.) are installed automatically.
+
+## Set up a virtual environment
+
+We strongly recommend installing PyBaMM inside a virtual environment so that it does not alter your system Python files.
+
+<Steps>
+  <Step title="Create a virtual environment">
+    Run the following command in the directory where you want to work:
+
+    <CodeGroup>
+
+    ```bash Linux and macOS
+    virtualenv env
+    ```
+
+    ```bash Windows
+    python -m pip install virtualenv
+    python -m virtualenv env
+    ```
+
+    </CodeGroup>
+  </Step>
+  <Step title="Activate the environment">
+    <CodeGroup>
+
+    ```bash Linux and macOS
+    source env/bin/activate
+    ```
+
+    ```bash Windows
+    env\Scripts\activate.bat
+    ```
+
+    </CodeGroup>
+  </Step>
+  <Step title="Install PyBaMM">
+    ```bash
+    pip install pybamm
+    ```
+  </Step>
+  <Step title="Deactivate when done">
+    ```bash
+    deactivate
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  For a primer on Python virtual environments, see [Real Python — Python Virtual Environments](https://realpython.com/python-virtual-environments-a-primer/).
+</Note>
+
+## Optional dependencies
+
+You can install PyBaMM with optional extras depending on your use case:
+
+| Extra | What it adds | Install command |
+|---|---|---|
+| `plot` | Matplotlib-based plotting via `sim.plot()` | `pip install "pybamm[plot]"` |
+| `cite` | Citation management via `pybamm.print_citations()` | `pip install "pybamm[cite]"` |
+| `bpx` | Battery Parameter eXchange format support | `pip install "pybamm[bpx]"` |
+| `jax` | JAX-based solver (see restrictions below) | `pip install "pybamm[jax]"` |
+| `all` | All of the above except JAX | `pip install "pybamm[all]"` |
+
+## Optional — JAX solver
+
+Install `jax` and `jaxlib` to use the JAX-based solver:
+
+```bash
+pip install "pybamm[jax]"
+```
+
+This automatically installs compatible versions of `jax` and `jaxlib` alongside PyBaMM.
+
+<Warning>
+  The JAX solver requires **Python 3.11 or later** and is **not supported on macOS with an x86\_64 (Intel) processor**. It works on Linux (x86\_64 and ARM), macOS (Apple Silicon), and Windows.
+</Warning>
+
+<Note>
+  The full conda-forge `pybamm` package includes `jax` and `jaxlib` by default.
+</Note>
+
+## Docker
+
+A `Dockerfile` is available in the [PyBaMM repository](https://github.com/pybamm-team/PyBaMM) for containerised environments.
+
+## Uninstall
+
+```bash
+pip uninstall pybamm
+```

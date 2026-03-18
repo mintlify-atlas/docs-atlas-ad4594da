@@ -1,0 +1,154 @@
+---
+title: IDAKLUSolver
+description: The IDAKLUSolver is the recommended solver for most PyBaMM simulations. It uses the SUNDIALS IDA integrator with the KLU sparse direct linear solver, and supports parallelism, Hermite interpolation, and output-variable selection.
+---
+
+`pybamm.IDAKLUSolver` is generally the fastest solver for lithium-ion battery models. It wraps the SUNDIALS IDA DAE integrator with the KLU sparse-direct linear solver, provided by the `pybammsolvers` package.
+
+## Constructor
+
+```python
+pybamm.IDAKLUSolver(
+    rtol=1e-4,
+    atol=1e-6,
+    root_method="casadi",
+    root_tol=1e-6,
+    extrap_tol=None,
+    on_extrapolation=None,
+    on_failure="error",
+    output_variables=None,
+    options=None,
+)
+```
+
+<ParamField path="rtol" type="float" default="1e-4">
+  Relative tolerance for the IDA integrator.
+</ParamField>
+
+<ParamField path="atol" type="float" default="1e-6">
+  Absolute tolerance for the IDA integrator.
+</ParamField>
+
+<ParamField path="root_method" type="str" default="&quot;casadi&quot;">
+  Method for consistent initial conditions. `"casadi"` uses CasADi's Newton solver; any `scipy.optimize.root` method string is also accepted.
+</ParamField>
+
+<ParamField path="root_tol" type="float" default="1e-6">
+  Tolerance for the root-finding step.
+</ParamField>
+
+<ParamField path="extrap_tol" type="float | None" default="0">
+  Tolerance for detecting extrapolation beyond the solved interval.
+</ParamField>
+
+<ParamField path="on_extrapolation" type="str" default="&quot;warn&quot;">
+  Behaviour on extrapolation: `"warn"`, `"error"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="on_failure" type="str" default="&quot;error&quot;">
+  Behaviour when the solver returns an error flag: `"error"`, `"warn"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="output_variables" type="list[str] | None" default="[]">
+  If provided, only these variables are computed during the solve. This can significantly reduce memory usage and solve time for large models.
+</ParamField>
+
+<ParamField path="options" type="dict | None" default="{}">
+  Advanced solver options. See the [Options reference](#options-reference) below.
+</ParamField>
+
+---
+
+## Options Reference
+
+The `options` dict exposes the full SUNDIALS IDA configuration. All keys and their defaults:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `print_stats` | `False` | Print solver statistics after each solve |
+| `num_threads` | `1` | Number of OpenMP threads |
+| `num_solvers` | `num_threads` | Number of parallel solvers (for input-parameter sweeps) |
+| `linear_solver` | `"SUNLinSol_KLU"` | SUNDIALS linear solver. Options: `"SUNLinSol_KLU"`, `"SUNLinSol_Dense"`, `"SUNLinSol_Band"`, `"SUNLinSol_SPBCGS"`, `"SUNLinSol_SPGMR"`, etc. |
+| `jacobian` | `"sparse"` | Jacobian form: `"none"`, `"dense"`, `"banded"`, `"sparse"`, `"matrix-free"` |
+| `preconditioner` | `"BBDP"` | Preconditioner for iterative solvers: `"none"` or `"BBDP"` |
+| `max_order_bdf` | `5` | Maximum order of the BDF linear multistep method |
+| `max_num_steps` | `100000` | Maximum steps to reach the next output time |
+| `dt_init` | `0.0` | Initial step size (0 = solver chooses) |
+| `dt_min` | `0.0` | Minimum absolute step size (0 = solver chooses) |
+| `dt_max` | `0.0` | Maximum absolute step size (0 = solver chooses) |
+| `max_error_test_failures` | `10` | Maximum error-test failures per step |
+| `max_nonlinear_iterations` | `40` | Maximum nonlinear iterations per step |
+| `max_convergence_failures` | `100` | Maximum nonlinear convergence failures per step |
+| `hermite_interpolation` | `True` | Store Hermite interpolation data. Disabled when `output_variables` are given. |
+| `hermite_reduction_factor` | `1.0` | Compression factor for Hermite spline (values > 1 reduce storage with a small accuracy cost) |
+| `suppress_algebraic_error` | `False` | Exclude algebraic variables from the error test |
+| `silence_sundials_errors` | `False` | Suppress SUNDIALS error messages during solve |
+| `calc_ic` | `True` | Calculate consistent initial conditions |
+| `init_all_y_ic` | `False` | If `True`, compute all y₀ given ẏ₀; if `False`, compute algebraic y₀ and differential ẏ₀ given differential y₀ |
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```python Default usage
+import pybamm
+
+solver = pybamm.IDAKLUSolver()
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.DFN(),
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+    solver=solver,
+)
+sol = sim.solve([0, 3600])
+print(sol["Terminal voltage [V]"].entries[-1])
+```
+
+```python Select output variables (memory efficient)
+import pybamm
+
+solver = pybamm.IDAKLUSolver(
+    output_variables=[
+        "Terminal voltage [V]",
+        "Current [A]",
+        "Discharge capacity [A.h]",
+    ]
+)
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.DFN(),
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+    solver=solver,
+)
+sol = sim.solve([0, 3600])
+```
+
+```python Parallel parameter sweep
+import pybamm
+import numpy as np
+
+solver = pybamm.IDAKLUSolver(
+    options={"num_threads": 4, "num_solvers": 4},
+    output_variables=["Terminal voltage [V]"],
+)
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+param["Current function [A]"] = "[input]"
+
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+
+# Solve for multiple C-rates in parallel
+inputs = [{"Current function [A]": i} for i in np.linspace(1, 5, 4)]
+for inp in inputs:
+    sol = sim.solve([0, 3600], inputs=inp)
+    print(sol["Terminal voltage [V]"].entries[-1])
+```
+
+</CodeGroup>
+
+<Tip>
+  `IDAKLUSolver` is the default solver used by `pybamm.Simulation` when no solver is specified. For most lithium-ion simulations, the defaults are a good starting point.
+</Tip>

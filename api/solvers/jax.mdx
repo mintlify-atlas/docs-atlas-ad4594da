@@ -1,0 +1,139 @@
+---
+title: JaxSolver
+description: The JaxSolver provides JAX-compiled ODE and BDF integration, enabling GPU/TPU acceleration and gradient-based optimisation through automatic differentiation.
+---
+
+`pybamm.JaxSolver` integrates PyBaMM models using JAX, enabling JIT compilation, GPU/TPU execution, and end-to-end differentiation through the solver.
+
+<Warning>
+  `JaxSolver` requires **Python ≥ 3.11** and is **not supported on Intel-based macOS** (`darwin/x86_64`). Install the `jax` extra: `pip install pybamm[jax]`.
+</Warning>
+
+## Constructor
+
+```python
+pybamm.JaxSolver(
+    method="BDF",
+    root_method=None,
+    rtol=1e-6,
+    atol=1e-6,
+    extrap_tol=None,
+    on_extrapolation=None,
+    extra_options=None,
+)
+```
+
+<ParamField path="method" type="str" default="&quot;BDF&quot;">
+  Integration method:
+
+  | Method | Description |
+  |--------|-------------|
+  | `"BDF"` | Custom JAX BDF integrator (`jax_bdf_integrate`). Supports implicit (stiff) systems. Initial conditions are computed internally. |
+  | `"RK45"` | Uses `jax.experimental.ode.odeint`. Explicit; ODE-only. |
+</ParamField>
+
+<ParamField path="root_method" type="str | None" default="None">
+  Method for computing consistent initial conditions. `None` uses the BDF solver's internal Newton chord method. Can be overridden with any `BaseSolver`-compatible method.
+</ParamField>
+
+<ParamField path="rtol" type="float" default="1e-6">
+  Relative tolerance.
+</ParamField>
+
+<ParamField path="atol" type="float" default="1e-6">
+  Absolute tolerance.
+</ParamField>
+
+<ParamField path="extrap_tol" type="float | None" default="0">
+  Tolerance for extrapolation detection.
+</ParamField>
+
+<ParamField path="on_extrapolation" type="str" default="&quot;warn&quot;">
+  Behaviour on extrapolation: `"warn"`, `"error"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="extra_options" type="dict | None" default="{}">
+  Additional options forwarded to the JAX integrator.
+</ParamField>
+
+---
+
+## Requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| Python | ≥ 3.11 |
+| Platform | Not `darwin/x86_64` (Intel macOS) |
+| JAX version | `>=0.7.0, <0.9.0` |
+| Model format | `model.convert_to_format` must be `"jax"` |
+| Events | Models must have **no** termination events |
+
+---
+
+## `get_solve`
+
+Returns a compiled JAX function for repeated fast solves.
+
+```python
+solve_fn = solver.get_solve(model, t_eval)
+# solve_fn(inputs) -> y
+```
+
+The returned function is JIT-compiled on first call and cached. Subsequent calls with the same `t_eval` reuse the compiled function.
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```python BDF solver
+import pybamm
+import numpy as np
+
+model = pybamm.lithium_ion.SPM(options={"convert_to_format": "jax"})
+param = pybamm.ParameterValues("Chen2020")
+
+solver = pybamm.JaxSolver(method="BDF", rtol=1e-6, atol=1e-6)
+
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+sol = sim.solve(np.linspace(0, 3600, 100))
+```
+
+```python RK45 explicit
+import pybamm
+import numpy as np
+
+solver = pybamm.JaxSolver(method="RK45")
+
+model = pybamm.lithium_ion.SPM(options={"convert_to_format": "jax"})
+param = pybamm.ParameterValues("Chen2020")
+
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+sol = sim.solve(np.linspace(0, 3600, 100))
+```
+
+```python Get compiled solve function
+import pybamm
+import numpy as np
+
+model = pybamm.lithium_ion.SPM(options={"convert_to_format": "jax"})
+param = pybamm.ParameterValues("Chen2020")
+param.process_model(model)
+
+t_eval = np.linspace(0, 3600, 100)
+solver = pybamm.JaxSolver()
+
+# Compile once
+solve_fn = solver.get_solve(model, t_eval)
+
+# Reuse for fast repeated solves
+for current in [1.0, 2.0, 5.0]:
+    y = solve_fn({"Current function [A]": current})
+```
+
+</CodeGroup>
+
+<Note>
+  When using `JaxSolver`, the model must be set up with `convert_to_format="jax"` and must not contain any termination events (e.g. voltage cut-off events). A `RuntimeError` is raised otherwise.
+</Note>

@@ -1,0 +1,283 @@
+---
+title: Using Parameter Sets
+description: Learn how to load built-in parameter sets, modify individual parameters, define custom parameter functions, and load parameters from BPX files.
+---
+
+`pybamm.ParameterValues` holds all the numerical values that define a specific battery cell — geometry, material properties, transport coefficients, kinetic parameters, and more. Every parameter in PyBaMM carries SI units in its name.
+
+## Loading a built-in parameter set
+
+PyBaMM ships with a collection of published parameter sets. Pass the name as a string:
+
+```python
+import pybamm
+
+param = pybamm.ParameterValues("Chen2020")
+```
+
+You can also load from a dict or copy from another `ParameterValues` object:
+
+```python
+# From a dict
+param = pybamm.ParameterValues({"Current function [A]": 1.0, ...})
+
+# Copy from existing
+param2 = pybamm.ParameterValues(param)
+```
+
+## Available parameter sets
+
+### Lithium-ion
+
+<CardGroup cols={2}>
+  <Card title="Chen2020" icon="flask">
+    LG M50 NMC/graphite cell. A widely used general-purpose parameter set.
+
+    ```python
+    param = pybamm.ParameterValues("Chen2020")
+    ```
+  </Card>
+  <Card title="Marquis2019" icon="flask">
+    NMC/graphite cell from the DFN model derivation paper. Used in many PyBaMM examples.
+
+    ```python
+    param = pybamm.ParameterValues("Marquis2019")
+    ```
+  </Card>
+  <Card title="OKane2022" icon="flask">
+    Graphite/NMC cell with degradation parameters (SEI, lithium plating).
+
+    ```python
+    param = pybamm.ParameterValues("OKane2022")
+    ```
+  </Card>
+  <Card title="ORegan2022" icon="flask">
+    NMC/graphite cell with thermal and mechanical parameters.
+
+    ```python
+    param = pybamm.ParameterValues("ORegan2022")
+    ```
+  </Card>
+  <Card title="Ecker2015" icon="flask">
+    Kokam NMC/graphite cell with full porous-electrode parameters.
+
+    ```python
+    param = pybamm.ParameterValues("Ecker2015")
+    ```
+  </Card>
+  <Card title="Ai2020" icon="flask">
+    NMC/graphite cell with mechanical parameters for stress-driven LAM.
+
+    ```python
+    param = pybamm.ParameterValues("Ai2020")
+    ```
+  </Card>
+  <Card title="Mohtat2020" icon="flask">
+    NMC/graphite with aging parameters.
+
+    ```python
+    param = pybamm.ParameterValues("Mohtat2020")
+    ```
+  </Card>
+  <Card title="NCA_Kim2011" icon="flask">
+    NCA/graphite cell.
+
+    ```python
+    param = pybamm.ParameterValues("NCA_Kim2011")
+    ```
+  </Card>
+  <Card title="Prada2013" icon="flask">
+    LFP/graphite A123 cell.
+
+    ```python
+    param = pybamm.ParameterValues("Prada2013")
+    ```
+  </Card>
+  <Card title="Ramadass2004" icon="flask">
+    Sony US18650 cell, one of the earliest complete DFN parameter sets.
+
+    ```python
+    param = pybamm.ParameterValues("Ramadass2004")
+    ```
+  </Card>
+  <Card title="Xu2019" icon="flask">
+    NMC/graphite pouch cell.
+
+    ```python
+    param = pybamm.ParameterValues("Xu2019")
+    ```
+  </Card>
+  <Card title="Chen2020_composite" icon="flask">
+    Composite graphite-SiOx/NMC cell (multi-phase negative electrode).
+
+    ```python
+    param = pybamm.ParameterValues("Chen2020_composite")
+    ```
+  </Card>
+</CardGroup>
+
+### Half-cell parameter sets
+
+```python
+param = pybamm.ParameterValues("Ecker2015_graphite_halfcell")
+param = pybamm.ParameterValues("OKane2022_graphite_SiOx_halfcell")
+```
+
+### Other chemistries
+
+```python
+# Lead-acid
+param = pybamm.ParameterValues("Sulzer2019")
+
+# Equivalent circuit model
+param = pybamm.ParameterValues("ECM_Example")
+
+# MSMR model
+param = pybamm.ParameterValues("MSMR_Example")
+
+# Sodium-ion
+param = pybamm.ParameterValues("Chayambuka2022")
+```
+
+## Exploring parameters
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+
+# Access a single parameter
+print(param["Nominal cell capacity [A.h]"])
+
+# List all keys
+print(list(param.keys()))
+
+# Get parameter metadata (units, category, etc.)
+info = param.get_info("Reference temperature [K]")
+print(info.units)  # 'K'
+
+# List parameters by category
+neg_electrode_params = param.list_by_category("negative electrode")
+```
+
+## Updating parameters
+
+Update individual values with dict-style assignment:
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+
+# Set constant current
+param["Current function [A]"] = 5.0
+
+# Change cell geometry
+param["Electrode height [m]"] = 0.065
+param["Electrode width [m]"] = 1.58
+
+# Update multiple values at once
+param.update({
+    "Negative electrode thickness [m]": 75e-6,
+    "Positive electrode thickness [m]"] = 70e-6,
+    "Separator thickness [m]"] = 25e-6,
+})
+```
+
+## Custom parameter functions
+
+Many parameters are functions (e.g. diffusivity as a function of concentration and temperature). Define them as Python callables:
+
+```python
+import pybamm
+
+# Diffusivity as a function of concentration and temperature
+def my_diffusivity(c_e, T):
+    return 1.0e-10 * pybamm.exp(-500 / T)
+
+param = pybamm.ParameterValues("Chen2020")
+param["Electrolyte diffusivity [m2.s-1]"] = my_diffusivity
+```
+
+The function arguments must use `pybamm` symbolic expressions so they can be differentiated and compiled.
+
+### Drive cycle (time-varying current)
+
+Use an `Interpolant` to define a current from data:
+
+```python
+import numpy as np
+import pybamm
+
+# Time [s] and current [A] arrays
+times = np.array([0, 100, 200, 300, 400, 500])
+currents = np.array([1.0, 2.0, 1.5, 0.5, -1.0, -2.0])
+
+current_interpolant = pybamm.Interpolant(times, currents, pybamm.t)
+
+param = pybamm.ParameterValues("Chen2020")
+param["Current function [A]"] = current_interpolant
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sol = sim.solve()  # t_eval is inferred from the data
+```
+
+## BPX format
+
+PyBaMM supports the [Battery Parameter eXchange (BPX)](https://bpxstandard.com/) format, a standardised JSON schema for battery parameters.
+
+<Note>
+  BPX support requires the optional `bpx` dependency: `pip install pybamm[bpx]`
+</Note>
+
+```python title="Loading from a BPX file"
+param = pybamm.ParameterValues.create_from_bpx("my_cell.json")
+
+# Load at a specific target SOC
+param = pybamm.ParameterValues.create_from_bpx("my_cell.json", target_soc=0.8)
+```
+
+```python title="Loading from a BPX dict object"
+bpx_dict = {
+    "Header": {...},
+    "Cell": {...},
+    "Parameterisation": {...},
+}
+param = pybamm.ParameterValues.create_from_bpx_obj(bpx_dict)
+```
+
+## Setting initial state of charge
+
+You can set the initial lithium distribution to correspond to a target SOC:
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+model = pybamm.lithium_ion.SPM()
+
+sim = pybamm.Simulation(model, parameter_values=param)
+
+# Solve starting at 50% SOC
+sol = sim.solve([0, 3600], initial_soc=0.5)
+```
+
+Alternatively, set it before solving:
+
+```python
+sim.build()
+sim.set_initial_state(0.5)
+sol = sim.solve([0, 3600])
+```
+
+## Input parameters
+
+For parameter sweeps or sensitivity analysis, mark a parameter as an `"[input]"` to pass it at solve time without rebuilding the model:
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+param["Current function [A]"] = "[input]"
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.build()
+
+# Solve with different currents without rebuilding
+for current in [1.0, 2.0, 5.0]:
+    sol = sim.solve([0, 3600], inputs={"Current function [A]": current})
+    print(current, sol["Battery voltage [V]"].entries[-1])
+```

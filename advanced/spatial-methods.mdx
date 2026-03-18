@@ -1,0 +1,280 @@
+---
+title: "Spatial Methods and Mesh"
+description: "Configure geometry, submesh types, spatial discretisation methods, and resolution for PyBaMM simulations."
+---
+
+PyBaMM solves PDEs by discretising them spatially before handing the resulting ODE/DAE system to a time-integrator. The spatial pipeline has three layers:
+
+1. **Geometry** — defines the physical extent of each domain
+2. **Mesh** — divides domains into nodes using a chosen submesh type
+3. **Spatial method** — turns symbolic differential operators (`pybamm.grad`, `pybamm.div`) into matrices acting on the mesh
+
+## Battery geometry
+
+For standard battery models, use the convenience function:
+
+```python
+import pybamm
+
+geometry = pybamm.battery_geometry(options=model.options)
+```
+
+`battery_geometry()` returns a `pybamm.Geometry` dict whose structure is:
+
+```python
+# Each domain maps a spatial variable to its min/max extents
+{
+    "negative electrode": {x_n: {"min": 0, "max": l_n}},
+    "separator":          {x_s: {"min": l_n, "max": l_n + l_s}},
+    "positive electrode": {x_p: {"min": l_n + l_s, "max": 1}},
+    "negative particle":  {r_n: {"min": 0, "max": 1}},
+    "positive particle":  {r_p: {"min": 0, "max": 1}},
+}
+```
+
+You can also build a `pybamm.Geometry` by hand:
+
+```python
+x_n = pybamm.standard_spatial_vars.x_n
+l_n = pybamm.Parameter("Negative electrode thickness [m]")
+
+geometry = pybamm.Geometry(
+    {"negative electrode": {x_n: {"min": pybamm.Scalar(0), "max": l_n}}}
+)
+```
+
+## Submesh types
+
+A submesh divides a single domain into nodes. PyBaMM provides four 1-D submesh classes:
+
+<CardGroup cols={2}>
+  <Card title="Uniform1DSubMesh" icon="grip-lines">
+    Uniform node spacing. The default for all battery domains.
+
+    ```python
+    pybamm.Uniform1DSubMesh
+    ```
+  </Card>
+
+  <Card title="Exponential1DSubMesh" icon="chart-line">
+    Nodes clustered toward one or both boundaries — useful for thin SEI layers.
+
+    ```python
+    pybamm.Exponential1DSubMesh
+    ```
+  </Card>
+
+  <Card title="Chebyshev1DSubMesh" icon="circle-nodes">
+    Chebyshev-cosine node distribution — tighter at boundaries.
+
+    ```python
+    pybamm.Chebyshev1DSubMesh
+    ```
+  </Card>
+
+  <Card title="UserSupplied1DSubMesh" icon="sliders">
+    Arbitrary node positions you supply as an array.
+
+    ```python
+    pybamm.UserSupplied1DSubMesh
+    ```
+  </Card>
+</CardGroup>
+
+### Exponential submesh parameters
+
+```python
+# side: "left" | "right" | "symmetric" (default)
+# stretch: float (default 1.15 for symmetric, 2.3 for left/right)
+submesh_types = {
+    "negative electrode": pybamm.Exponential1DSubMesh,
+}
+```
+
+Pass extra parameters by wrapping with `pybamm.MeshGenerator`:
+
+```python
+submesh_types = {
+    "negative electrode": pybamm.MeshGenerator(
+        pybamm.Exponential1DSubMesh,
+        submesh_params={"side": "left", "stretch": 3.0},
+    )
+}
+```
+
+### User-supplied submesh
+
+```python
+import numpy as np
+
+my_edges = np.concatenate([
+    np.linspace(0, 0.5e-4, 11),
+    np.linspace(0.5e-4, 1e-4, 6)[1:],
+])
+
+submesh_types = {
+    "negative electrode": pybamm.MeshGenerator(
+        pybamm.UserSupplied1DSubMesh,
+        submesh_params={"edges": my_edges},
+    )
+}
+```
+
+`UserSupplied1DSubMesh` validates that `len(edges) == npts + 1` and that the endpoints match the geometry limits.
+
+## Available spatial methods
+
+### FiniteVolume
+
+`pybamm.FiniteVolume` is the default for all 1-D domains. It implements cell-centred finite volumes and supports an optional `extrapolation` option:
+
+```python
+method = pybamm.FiniteVolume(options={"extrapolation": {"order": "linear", "use_bcs": True}})
+```
+
+### SpectralVolume
+
+`pybamm.SpectralVolume` is a higher-order method that subdivides each finite volume into Chebyshev control volumes. It must be paired with `pybamm.SpectralVolume1DSubMesh`:
+
+```python
+submesh_types   = {"negative particle": pybamm.SpectralVolume1DSubMesh}
+spatial_methods = {"negative particle": pybamm.SpectralVolume(order=2)}
+```
+
+The `order` argument controls the number of sub-cells per spectral volume (default is `2`).
+
+### ScikitFiniteElement
+
+`pybamm.ScikitFiniteElement` is used for 2-D current collector problems (`dimensionality=2`):
+
+```python
+model = pybamm.lithium_ion.SPM(options={"dimensionality": 2})
+# default_spatial_methods will include ScikitFiniteElement for "current collector"
+```
+
+<Note>
+`ScikitFiniteElement` requires the optional `pybamm[scikit-fem]` extra to be installed.
+</Note>
+
+## Building a mesh
+
+`pybamm.Mesh` takes the geometry, a `submesh_types` dict, and a `var_pts` dict:
+
+```python title="build_mesh.py"
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+
+geometry = model.default_geometry
+param.process_geometry(geometry)
+
+submesh_types = model.default_submesh_types
+var_pts = model.default_var_pts
+
+mesh = pybamm.Mesh(geometry, submesh_types, var_pts)
+```
+
+## Controlling resolution with var_pts
+
+`var_pts` maps spatial variable names (strings or `pybamm.SpatialVariable` objects) to the number of nodes:
+
+```python
+var_pts = {
+    "x_n": 30,  # negative electrode
+    "x_s": 15,  # separator
+    "x_p": 30,  # positive electrode
+    "r_n": 10,  # negative particle
+    "r_p": 10,  # positive particle
+}
+```
+
+Default values for battery models (`BaseBatteryModel.default_var_pts`):
+
+| Variable | Default pts | Description |
+|---|---|---|
+| `x_n`, `x_s`, `x_p` | 20 | Electrode/separator through-thickness |
+| `r_n`, `r_p` | 20 | Particle radius |
+| `y`, `z` | 10 | Current collector in-plane (2-D models) |
+| `R_n`, `R_p` | 30 | Particle size distribution |
+
+## Passing custom spatial methods to Simulation
+
+`pybamm.Simulation` accepts `submesh_types`, `var_pts`, and `spatial_methods` directly:
+
+```python title="custom_spatial.py"
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+param = pybamm.ParameterValues("Chen2020")
+
+custom_submesh = {
+    **model.default_submesh_types,
+    # Use exponential mesh in the negative electrode
+    "negative electrode": pybamm.MeshGenerator(
+        pybamm.Exponential1DSubMesh,
+        submesh_params={"side": "left"},
+    ),
+}
+
+custom_var_pts = {
+    **model.default_var_pts,
+    "x_n": 40,
+    "r_n": 30,
+}
+
+custom_spatial = {
+    **model.default_spatial_methods,
+    # Use SpectralVolume in the negative particle
+    "negative particle": pybamm.SpectralVolume(order=2),
+}
+# SpectralVolume1DSubMesh must also be set when using SpectralVolume
+custom_submesh["negative particle"] = pybamm.SpectralVolume1DSubMesh
+
+sim = pybamm.Simulation(
+    model,
+    parameter_values=param,
+    submesh_types=custom_submesh,
+    var_pts=custom_var_pts,
+    spatial_methods=custom_spatial,
+)
+sim.solve([0, 3600])
+```
+
+## Discretisation object
+
+For lower-level control, build a `Discretisation` manually:
+
+```python title="manual_discretisation.py"
+import pybamm
+
+model  = pybamm.lithium_ion.SPM()
+param  = pybamm.ParameterValues("Chen2020")
+
+geometry = model.default_geometry
+param.process_geometry(geometry)
+param.process_model(model)
+
+mesh = pybamm.Mesh(geometry, model.default_submesh_types, model.default_var_pts)
+
+disc = pybamm.Discretisation(
+    mesh=mesh,
+    spatial_methods=model.default_spatial_methods,
+    check_model=True,
+)
+disc.process_model(model)
+```
+
+`Discretisation` constructor parameters:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `mesh` | `None` | A built `pybamm.Mesh` |
+| `spatial_methods` | `None` | Dict mapping domain name to spatial method instance |
+| `check_model` | `True` | Run post-discretisation model checks (disable for speed) |
+| `remove_independent_variables_from_rhs` | `False` | Move decoupled RHS variables to explicit integration |
+| `resolve_coupled_variables` | `False` | Resolve `CoupledVariable` nodes before processing |
+
+<Tip>
+The `"macroscale"` key in `spatial_methods` is a shortcut that simultaneously sets `"negative electrode"`, `"separator"`, and `"positive electrode"` to the same method.
+</Tip>

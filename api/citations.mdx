@@ -1,0 +1,135 @@
+---
+title: Citations
+description: PyBaMM tracks which models, solvers, and parameter sets are used in a simulation and compiles the relevant academic references so you can acknowledge them correctly.
+---
+
+When you use a PyBaMM model, solver, or parameter set, the library automatically registers the relevant BibTeX citation keys. You can print all registered citations at the end of your simulation script.
+
+---
+
+## `pybamm.print_citations`
+
+```python
+pybamm.print_citations(filename=None, output_format="text", verbose=False)
+```
+
+Print (or save) all citations that were registered during the session.
+
+<ParamField path="filename" type="str | None" default="None">
+  If provided, write citations to this file instead of stdout.
+</ParamField>
+
+<ParamField path="output_format" type="str" default="&quot;text&quot;">
+  Output format:
+  - `"text"` — human-readable plain text (via `pybtex` plain style)
+  - `"bibtex"` — raw BibTeX entries
+</ParamField>
+
+<ParamField path="verbose" type="bool" default="false">
+  If `True`, annotate each citation with the PyBaMM component that registered it. Only available when writing to stdout (not to a file).
+</ParamField>
+
+```python
+import pybamm
+
+# Run a simulation — citations are registered automatically
+model = pybamm.lithium_ion.DFN()
+param = pybamm.ParameterValues("Chen2020")
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+
+# Print as plain text
+pybamm.print_citations()
+
+# Save as BibTeX
+pybamm.print_citations("my_citations.bib", output_format="bibtex")
+
+# Verbose: shows which component registered each citation
+pybamm.print_citations(verbose=True)
+```
+
+<Note>
+  `print_citations` requires the optional `pybtex` dependency. Install it with `pip install pybamm[cite]`.
+</Note>
+
+---
+
+## `pybamm.citations.register`
+
+Manually register a citation key or an inline BibTeX string.
+
+```python
+pybamm.citations.register(key)
+```
+
+<ParamField path="key" type="str" required>
+  Either:
+  - A citation key that exists in `pybamm/CITATIONS.bib` (e.g. `"Chen2020"`)
+  - A full BibTeX string (e.g. `"@article{MyWork2024, ...}"`)
+</ParamField>
+
+```python
+import pybamm
+
+# Register a known key
+pybamm.citations.register("Sulzer2021")
+
+# Register an inline BibTeX entry
+pybamm.citations.register(
+    """@article{MyWork2024,
+         author  = {Smith, Jane},
+         title   = {A New Battery Model},
+         journal = {J. Electrochem. Soc.},
+         year    = {2024},
+         volume  = {171},
+         pages   = {010501},
+       }"""
+)
+
+pybamm.print_citations()
+```
+
+<Warning>
+  Registering an inline BibTeX entry with the same key as an existing entry will **overwrite** the existing citation without error.
+</Warning>
+
+---
+
+## `CITATIONS.bib`
+
+All built-in citation keys are stored in `pybamm/CITATIONS.bib`. The file uses standard BibTeX format. Some notable keys:
+
+| Key | Description |
+|-----|-------------|
+| `Sulzer2021` | The main PyBaMM paper (always registered) |
+| `Harris2020` | NumPy (always registered) |
+| `Marquis2019` | SPM / SPMe paper |
+| `Chen2020` | LG M50 parameter set |
+| `Ai2020` | Ai 2020 parameter set |
+| `Ecker2015` | Ecker 2015 parameter set |
+| `Andersson2019` | CasADi (registered when `CasadiSolver` is used) |
+| `Virtanen2020` | SciPy (registered when `ScipySolver` is used) |
+| `jax2018` | JAX (registered when `JaxSolver` is used) |
+| `Wang2002` | Spectral Volume method |
+
+---
+
+## Automatic Registration
+
+Citations are registered automatically when you instantiate certain objects:
+
+```python
+import pybamm
+
+# These all register citations behind the scenes:
+pybamm.lithium_ion.DFN()       # registers Marquis2019, etc.
+pybamm.ParameterValues("Chen2020")  # registers Chen2020
+pybamm.CasadiSolver()          # registers Andersson2019
+pybamm.ScipySolver()           # registers Virtanen2020
+pybamm.SpectralVolume()        # registers Wang2002
+
+# Always registered (PyBaMM itself and NumPy):
+# Sulzer2021, Harris2020
+
+pybamm.print_citations()
+```

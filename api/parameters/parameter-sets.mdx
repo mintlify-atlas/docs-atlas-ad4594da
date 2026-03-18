@@ -1,0 +1,140 @@
+---
+title: Parameter Sets
+description: PyBaMM ships with built-in parameter sets for lithium-ion, lead-acid, sodium-ion, and equivalent circuit models. This page lists every available set and explains how to load, inspect, and extend them.
+---
+
+## Available Parameter Sets
+
+All built-in sets are registered as Python entry points under the `pybamm_parameter_sets` group and are accessible via `pybamm.parameter_sets`.
+
+| Name | Chemistry | Reference |
+|------|-----------|--------------------------------------------------------------|
+| `Ai2020` | Lithium-ion | Ai et al., 2020 |
+| `Chen2020` | Lithium-ion | Chen et al., 2020 |
+| `Chen2020_composite` | Lithium-ion (composite) | Chen et al., 2020 |
+| `Ecker2015` | Lithium-ion | Ecker et al., 2015 |
+| `Ecker2015_graphite_halfcell` | Li-ion half-cell | Ecker et al., 2015 |
+| `Marquis2019` | Lithium-ion | Marquis et al., 2019 |
+| `Mohtat2020` | Lithium-ion | Mohtat et al., 2020 |
+| `NCA_Kim2011` | Lithium-ion (NCA) | Kim et al., 2011 |
+| `OKane2022` | Lithium-ion (degradation) | O'Kane et al., 2022 |
+| `OKane2022_graphite_SiOx_halfcell` | Li-ion half-cell | O'Kane et al., 2022 |
+| `ORegan2022` | Lithium-ion | O'Regan et al., 2022 |
+| `Prada2013` | Lithium-ion | Prada et al., 2013 |
+| `Ramadass2004` | Lithium-ion | Ramadass et al., 2004 |
+| `Xu2019` | Lithium-ion | Xu et al., 2019 |
+| `Sulzer2019` | Lead-acid | Sulzer et al., 2019 |
+| `Chayambuka2022` | Sodium-ion | Chayambuka et al., 2022 |
+| `ECM_Example` | Equivalent circuit | Example set |
+| `MSMR_Example` | MSMR lithium-ion | Example set |
+
+---
+
+## Loading a Parameter Set
+
+### By name string
+
+Pass the name directly to `pybamm.ParameterValues`:
+
+```python
+import pybamm
+
+param = pybamm.ParameterValues("Chen2020")
+print(param["Reference temperature [K]"])  # 298.15
+```
+
+### Listing all available sets
+
+```python
+for name in pybamm.parameter_sets.keys():
+    print(name)
+```
+
+### Inspecting a set before loading
+
+```python
+# Access raw dict without constructing ParameterValues
+raw = pybamm.parameter_sets["Marquis2019"]
+```
+
+---
+
+## Searching Within a Parameter Set
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+
+# Print all parameters whose name contains "electrolyte"
+param.search("electrolyte")
+
+# Print all parameters whose name contains "diffusivity"
+param.search("diffusivity")
+```
+
+---
+
+## Overriding Values
+
+You can override individual entries after loading:
+
+```python
+param = pybamm.ParameterValues("Chen2020")
+
+# Override a scalar
+param["Current function [A]"] = 2.0
+
+# Override with a Python function (temperature-dependent diffusivity)
+def my_diffusivity(T):
+    return 1.5e-10 * pybamm.exp(-500 / T)
+
+param["Electrolyte diffusivity [m2.s-1]"] = my_diffusivity
+```
+
+---
+
+## Creating a Custom Parameter Set
+
+A custom parameter set is a plain Python module that exposes a `get_parameter_values()` function returning a `dict`.
+
+```python
+# my_parameters/MyCell2024.py
+
+def get_parameter_values():
+    return {
+        "chemistry": "lithium_ion",
+        "Cell capacity [A.h]": 5.0,
+        "Reference temperature [K]": 298.15,
+        "Current function [A]": 5.0,
+        # ... all required parameters
+    }
+```
+
+Register the entry point in your package's `pyproject.toml`:
+
+```toml
+[project.entry-points."pybamm_parameter_sets"]
+MyCell2024 = "my_parameters.MyCell2024:get_parameter_values"
+```
+
+After installing your package (`pip install -e .`), you can use it like any other set:
+
+```python
+param = pybamm.ParameterValues("MyCell2024")
+```
+
+---
+
+## Loading from a BPX File
+
+The [Battery Parameter eXchange (BPX)](https://bpxstandard.com/) format is an open standard for sharing battery parameters. PyBaMM can import BPX files directly:
+
+```python
+param = pybamm.ParameterValues.create_from_bpx("cell_parameters.json")
+
+# Set initial state of charge
+param = pybamm.ParameterValues.create_from_bpx("cell_parameters.json", target_soc=0.8)
+```
+
+<Note>
+  BPX support requires the optional `bpx` dependency: `pip install pybamm[bpx]`.
+</Note>

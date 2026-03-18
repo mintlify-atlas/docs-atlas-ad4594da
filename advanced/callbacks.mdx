@@ -1,0 +1,167 @@
+---
+title: "Callbacks"
+description: "Hook into experiment simulation events — logging, early stopping, data export — using PyBaMM's Callback interface."
+---
+
+Callbacks let you run custom code at defined points during an experiment simulation without modifying the solver or model. They are attached to `sim.solve()` and invoked automatically as the solver progresses through cycles and steps.
+
+<Note>
+The Callback API is **experimental** — the interface may change in future releases.
+</Note>
+
+## Built-in callbacks
+
+### LoggingCallback
+
+Added automatically if no `LoggingCallback` is present in the list passed to `sim.solve()`. It logs progress to `pybamm.logger` or an optional log file:
+
+```python
+import pybamm
+
+# Log to console (default)
+cb = pybamm.LoggingCallback()
+
+# Log to a file instead
+cb = pybamm.LoggingCallback(logfile="simulation.log")
+```
+
+`LoggingCallback` emits:
+- `NOTICE` on experiment start, each cycle start, each step start, and experiment end
+- `WARNING` when an experiment step is infeasible
+- `ERROR` on solver errors
+
+### CallbackList
+
+`CallbackList` wraps multiple callbacks so they can be dispatched as one:
+
+```python
+callbacks = pybamm.callbacks.CallbackList([
+    pybamm.LoggingCallback(),
+    my_custom_callback,
+])
+```
+
+You normally do not need to construct `CallbackList` manually — `setup_callbacks()` does this for you and ensures a `LoggingCallback` is always present.
+
+## Callback interface
+
+Every callback method receives a single `logs` dict. The table below lists each hook and the keys available in `logs` at that point:
+
+| Method | When called | Key `logs` entries |
+|---|---|---|
+| `on_experiment_start(logs)` | Before the first cycle | — |
+| `on_cycle_start(logs)` | Before each cycle | `"cycle number"` `(current, total)` tuple; `"elapsed time"` |
+| `on_step_start(logs)` | Before each step | `"cycle number"`, `"step number"` `(current, total)` tuple, `"step operating conditions"` |
+| `on_step_end(logs)` | After each step completes | `"stopping conditions"` → `{"time": ...}`, `"experiment time"` |
+| `on_cycle_end(logs)` | After each cycle completes | `"stopping conditions"` → `{"capacity": ..., "voltage": ...}`, `"summary variables"`, `"start capacity"`, `"Minimum voltage [V]"` |
+| `on_experiment_end(logs)` | After the last cycle | `"elapsed time"` |
+| `on_experiment_error(logs)` | When a `SolverError` occurs | `"error"` |
+| `on_experiment_infeasible_time(logs)` | Step hits default duration | `"step duration"`, `"cycle number"`, `"step number"`, `"step operating conditions"` |
+| `on_experiment_infeasible_event(logs)` | Step terminated by an event | `"termination"`, `"cycle number"`, `"step number"`, `"step operating conditions"` |
+
+## Creating a custom callback
+
+Subclass `pybamm.callbacks.Callback` and override whichever hooks you need. Methods that are not overridden default to `pass`.
+
+```python title="save_callback.py"
+import json
+import pybamm
+
+
+class StepDataCallback(pybamm.callbacks.Callback):
+    """
+    Saves the step operating conditions and elapsed time to a JSON file
+    at the end of each step.
+    """
+
+    def __init__(self, output_path="step_log.json"):
+        self.output_path = output_path
+        self.records = []
+
+    def on_step_end(self, logs):
+        record = {
+            "step": logs["step number"][0],
+            "cycle": logs["cycle number"][0],
+            "experiment_time_s": logs["experiment time"],
+        }
+        self.records.append(record)
+
+    def on_experiment_end(self, logs):
+        with open(self.output_path, "w") as f:
+            json.dump(self.records, f, indent=2)
+        pybamm.logger.info(f"Step data written to {self.output_path}")
+```
+
+## Using callbacks with Simulation
+
+Pass a list of callback instances to the `callbacks` keyword of `sim.solve()`:
+
+```python title="use_callbacks.py"
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+
+experiment = pybamm.Experiment(
+    [
+        "Discharge at 1C until 3.0 V",
+        "Rest for 10 minutes",
+        "Charge at 0.5C until 4.2 V",
+    ]
+)
+
+sim = pybamm.Simulation(
+    model,
+    parameter_values=param,
+    experiment=experiment,
+)
+
+callbacks = [
+    pybamm.LoggingCallback(),
+    StepDataCallback(output_path="my_run.json"),
+]
+
+sol = sim.solve(callbacks=callbacks)
+```
+
+<Tip>
+A `LoggingCallback` is inserted automatically if you do not include one, so you only need to list callbacks you actually want in addition to the default logging.
+</Tip>
+
+## Example: early-stopping callback
+
+The following callback raises an exception to stop the simulation if the voltage drops below a threshold mid-experiment:
+
+```python title="early_stop_callback.py"
+import pybamm
+
+
+class EarlyStopCallback(pybamm.callbacks.Callback):
+    """Stop the simulation if voltage drops below a threshold."""
+
+    def __init__(self, min_voltage=3.0):
+        self.min_voltage = min_voltage
+
+    def on_step_end(self, logs):
+        # "stopping conditions" is available after each step
+        stop = logs["stopping conditions"]
+        # Inspect solver-provided minimum voltage if present
+        if stop.get("voltage") is not None:
+            v_min = stop["voltage"][0]
+            if v_min < self.min_voltage:
+                raise pybamm.SolverError(
+                    f"Voltage {v_min:.3f} V fell below threshold {self.min_voltage:.3f} V"
+                )
+
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.SPM(),
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+    experiment=pybamm.Experiment(["Discharge at 2C until 2.5 V"]),
+)
+sim.solve(callbacks=[EarlyStopCallback(min_voltage=2.8)])
+```
+
+<Accordion title="Callback dispatch internals">
+`CallbackList` delegates every `on_*` call to each registered callback using a `callback_loop_decorator`. The decorator is applied automatically at class definition time by inspecting all methods that start with `on_` via `inspect.getmembers`. This means adding a new `on_custom_event` method to `Callback` automatically becomes dispatchable through `CallbackList` without any changes to `CallbackList` itself.
+</Accordion>

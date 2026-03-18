@@ -1,0 +1,155 @@
+---
+title: "Lead-Acid Models API"
+description: "Electrochemical lead-acid battery models available in pybamm.lead_acid."
+---
+
+The `pybamm.lead_acid` module provides porous-electrode models for lead-acid batteries based on the asymptotic and full porous electrode frameworks.
+
+<Note>
+  Lead-acid models do not use particles (the `"particle shape"` option is fixed to `"no particles"`). Porosity changes during cycling are central to the lead-acid chemistry and are included automatically.
+</Note>
+
+## Available models
+
+| Class | Description |
+|---|---|
+| `Full` | Full porous electrode model (Newman-Tiedemann) |
+| `LOQS` | Leading-Order Quasi-Static model |
+| `BasicFull` | Simplified educational implementation of the full model |
+
+---
+
+## `pybamm.lead_acid.Full`
+
+Full porous electrode model for lead-acid, based on the Newman-Tiedemann framework. Resolves the full electrolyte concentration, potential, and porosity distributions.
+
+```python
+pybamm.lead_acid.Full(options=None, name="Full model", build=True)
+```
+
+<ParamField path="options" type="dict">
+  Model options. See [Options reference](#options-reference) below.
+</ParamField>
+
+<ParamField path="name" type="str" default="Full model">
+  Human-readable model name.
+</ParamField>
+
+<ParamField path="build" type="bool" default="true">
+  Build the model on instantiation. Pass `False` to modify sub-models first.
+</ParamField>
+
+**Default parameter set:** `pybamm.ParameterValues("Sulzer2019")`
+
+---
+
+## `pybamm.lead_acid.LOQS`
+
+Leading-Order Quasi-Static model — an asymptotic reduction of the full model. Much faster than `Full`, valid at low C-rates.
+
+```python
+pybamm.lead_acid.LOQS(options=None, name="LOQS model", build=True)
+```
+
+**Default parameter set:** `pybamm.ParameterValues("Sulzer2019")`
+
+**Default solver:** `pybamm.CasadiSolver()`
+
+<Tip>
+  LOQS uses the Jacobian disabled by default (`use_jacobian = False`) when `dimensionality = 0` because the system is small enough that this is faster.
+</Tip>
+
+---
+
+## `pybamm.lead_acid.BasicFull`
+
+A simplified, single-file educational implementation of the full lead-acid model. Not intended for research — use `Full` instead.
+
+```python
+pybamm.lead_acid.BasicFull(name="Basic Full model", build=True)
+```
+
+---
+
+## Options reference
+
+Lead-acid models accept the same base `BatteryModelOptions` dictionary as lithium-ion models, with the following notable options:
+
+| Option | Valid values | Default | Notes |
+|---|---|---|---|
+| `"hydrolysis"` | `"false"`, `"true"` | `"false"` | Include oxygen evolution (hydrolysis). Requires `"surface form" != "false"`. |
+| `"convection"` | `"none"`, `"uniform transverse"`, `"full transverse"` | `"none"` | Electrolyte convection effects. |
+| `"surface form"` | `"false"`, `"differential"`, `"algebraic"` | `"false"` | Surface potential formulation. |
+| `"operating mode"` | `"current"`, `"voltage"`, `"power"`, callable | `"current"` | External circuit operating mode. |
+| `"thermal"` | `"isothermal"`, `"lumped"`, `"x-lumped"`, `"x-full"` | `"isothermal"` | Thermal model. |
+| `"current collector"` | `"uniform"`, `"potential pair"`, `"potential pair quite conductive"` | `"uniform"` | Current collector model. |
+| `"dimensionality"` | `0`, `1`, `2` | `0` | Current collector dimensionality. |
+
+<Warning>
+  `"hydrolysis": "true"` requires `"surface form"` to be set to `"differential"` or `"algebraic"`. Setting it alongside `"surface form": "false"` raises an error.
+</Warning>
+
+## Default mesh points
+
+The default `var_pts` for lead-acid models are:
+
+```python
+{"x_n": 25, "x_s": 41, "x_p": 34, "y": 10, "z": 10}
+```
+
+## Examples
+
+<CodeGroup>
+
+```python Basic LOQS discharge
+import pybamm
+
+model = pybamm.lead_acid.LOQS()
+param = pybamm.ParameterValues("Sulzer2019")
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+
+sol = sim.solution
+print(sol["Terminal voltage [V]"].entries)
+```
+
+```python Full model with hydrolysis
+import pybamm
+
+model = pybamm.lead_acid.Full(
+    options={
+        "hydrolysis": "true",
+        "surface form": "algebraic",
+    }
+)
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+```
+
+```python LOQS with convection
+import pybamm
+
+model = pybamm.lead_acid.LOQS(
+    options={"convection": "uniform transverse"}
+)
+```
+
+```python Experiment with LOQS
+import pybamm
+
+model = pybamm.lead_acid.LOQS()
+experiment = pybamm.Experiment(
+    [
+        "Discharge at C/5 for 10 hours or until 10.5 V",
+        "Rest for 1 hour",
+        "Charge at C/5 until 12.6 V",
+    ]
+)
+sim = pybamm.Simulation(model, experiment=experiment)
+sim.solve()
+sim.plot()
+```
+
+</CodeGroup>

@@ -1,0 +1,180 @@
+---
+title: "Equivalent Circuit Models"
+description: "Equivalent circuit models (ECMs) in PyBaMM, including the Thevenin model with configurable RC elements, thermal submodel, and diffusion element."
+---
+
+Equivalent circuit models (ECMs) represent battery behaviour using electrical circuit analogues — resistors, capacitors, and a voltage source — rather than the partial differential equations of physics-based models. PyBaMM provides ECMs under the `pybamm.equivalent_circuit` namespace.
+
+## When to use ECMs vs physics-based models
+
+<CardGroup cols={2}>
+  <Card title="Use ECMs when" icon="check">
+    - Computational speed is critical (e.g. real-time BMS)
+    - Only terminal voltage and current are available for calibration
+    - A simple, interpretable model is preferred
+    - Running large-scale multi-cell pack simulations
+  </Card>
+  <Card title="Use physics-based models when" icon="flask">
+    - Internal state variables (SOC, concentration, temperature gradients) are needed
+    - Degradation mechanisms (SEI, plating) must be captured
+    - Electrode-level design and optimisation is the goal
+    - High-accuracy predictions over wide operating ranges are required
+  </Card>
+</CardGroup>
+
+---
+
+## Available models
+
+### Thevenin
+
+The `Thevenin` model is the classical Thevenin equivalent circuit model. It consists of:
+
+- An **OCV element** representing the open-circuit voltage as a function of state of charge
+- A **series resistor** (R0) representing instantaneous ohmic resistance
+- One or more **RC elements** (R1-C1, R2-C2, ...) representing diffusion-related relaxation dynamics
+- An optional **diffusion element** for additional concentration polarisation
+- A **lumped thermal model** for cell and jig temperatures, with heat generation terms from each element
+
+Heat generation follows the formulation in Nieto et al. (2012), with contributions from each circuit element.
+
+**Reference:** Barletta, G., et al. (2022). Thevenin equivalent circuit model characterisation of lithium-ion batteries.
+
+```python
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin()
+print(model.name)  # 'Thevenin Equivalent Circuit Model'
+
+# Default parameters use the ECM_Example parameter set
+param = model.default_parameter_values
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+---
+
+## Model options
+
+All options are passed as a dictionary to the `options` argument at instantiation.
+
+<AccordionGroup>
+  <Accordion title="Number of RC elements">
+
+Control how many RC parallel branches are included. The default is 1 (one RC pair).
+
+| Option | Values | Default |
+|---|---|---|
+| `"number of rc elements"` | Any positive integer as a string | `1` |
+
+```python
+# Two RC elements for better relaxation modelling
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"number of rc elements": 2}
+)
+```
+
+  </Accordion>
+  <Accordion title="Diffusion element">
+
+Add a Warburg-like diffusion element to capture long-timescale concentration effects.
+
+| Option | Values | Default |
+|---|---|---|
+| `"diffusion element"` | `"false"`, `"true"` | `"false"` |
+
+```python
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"diffusion element": "true"}
+)
+```
+
+  </Accordion>
+  <Accordion title="Operating mode">
+
+Same operating modes as physics-based models are supported.
+
+| Option | Values | Default |
+|---|---|---|
+| `"operating mode"` | `"current"`, `"voltage"`, `"power"`, `"differential power"`, `"resistance"`, `"differential resistance"`, `"CCCV"`, callable | `"current"` |
+
+```python
+# Simulate at constant voltage
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"operating mode": "voltage"}
+)
+```
+
+  </Accordion>
+  <Accordion title="Discharge energy tracking">
+
+Optionally compute throughput energy and throughput capacity in addition to discharge capacity.
+
+| Option | Values | Default |
+|---|---|---|
+| `"calculate discharge energy"` | `"false"`, `"true"` | `"false"` |
+
+```python
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"calculate discharge energy": "true"}
+)
+```
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## ECM parameters
+
+The `Thevenin` model uses `pybamm.EcmParameters` and defaults to the `ECM_Example` parameter set. Key parameters include:
+
+| Parameter | Description |
+|---|---|
+| Open-circuit voltage (OCV) | Lookup table or function of SOC |
+| R0 | Series (ohmic) resistance |
+| R1, R2, ... | RC branch resistances |
+| C1, C2, ... | RC branch capacitances |
+| Cell heat capacity | For thermal model |
+| Jig heat capacity | For jig thermal model |
+
+```python
+import pybamm
+
+param = pybamm.ParameterValues("ECM_Example")
+print(param.keys())
+```
+
+---
+
+## Extended example
+
+```python
+import pybamm
+
+# Thevenin model with 2 RC elements and a diffusion element
+model = pybamm.equivalent_circuit.Thevenin(
+    options={
+        "number of rc elements": 2,
+        "diffusion element": "true",
+        "calculate discharge energy": "true",
+    }
+)
+
+param = model.default_parameter_values
+
+experiment = pybamm.Experiment([
+    "Discharge at 1C until 2.5 V",
+    "Rest for 1 hour",
+    "Charge at 1C until 4.2 V",
+])
+
+sim = pybamm.Simulation(model, parameter_values=param, experiment=experiment)
+sim.solve()
+sim.plot()
+```
+
+<Tip>
+The `Thevenin` model's `default_quick_plot_variables` includes current, voltage, OCV, SoC, power, temperatures, and heat generation terms — all available immediately after solving.
+</Tip>

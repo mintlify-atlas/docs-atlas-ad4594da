@@ -1,97 +1,133 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "PyBaMM"
+description: "Fast and flexible physics-based battery models in Python"
+mode: "custom"
 ---
 
-## Setting up
+<div style={{background: "linear-gradient(135deg, #f4dd5e 0%, #4278a3 100%)", padding: "80px 40px", borderRadius: "8px", marginBottom: "48px", textAlign: "center"}}>
+  <h1 style={{color: "#00303f", fontSize: "3rem", fontWeight: "700", marginBottom: "16px", fontFamily: "Inter, sans-serif"}}>PyBaMM</h1>
+  <p style={{color: "#00303f", fontSize: "1.25rem", maxWidth: "600px", margin: "0 auto 32px", fontFamily: "Inter, sans-serif"}}>
+    Python Battery Mathematical Modelling — an open-source library for fast, flexible physics-based battery simulation.
+  </p>
+  <div style={{display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap"}}>
+    <a href="/quickstart" style={{background: "#00303f", color: "#ffffff", padding: "12px 28px", borderRadius: "24px", textDecoration: "none", fontWeight: "600", fontFamily: "Inter, sans-serif"}}>Get Started</a>
+    <a href="/installation" style={{background: "#ffffff", color: "#1a1f29", padding: "12px 28px", borderRadius: "4px", textDecoration: "none", fontWeight: "600", fontFamily: "Inter, sans-serif", border: "1px solid #d9dce1"}}>Installation</a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+```python
+import pybamm
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+model = pybamm.lithium_ion.DFN()   # Doyle-Fuller-Newman model
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])               # solve for 1 hour
+sim.plot()
+```
 
-## Make it yours
+## Why PyBaMM?
 
-Design a docs site that looks great and empowers your users.
+PyBaMM accelerates battery modelling research by providing open-source tools for multi-institutional, interdisciplinary collaboration. It delivers:
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+- A **framework** for writing and solving systems of differential equations
+- A **library of battery models** (SPM, SPMe, DFN, MPM, MSMR, ECM, and more)
+- **Specialized tools** for simulating battery experiments and visualizing results
+
+<CardGroup cols={2}>
+  <Card title="Get Started" icon="rocket" href="/quickstart">
+    Run your first battery simulation in minutes with the quickstart guide.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Installation" icon="download" href="/installation">
+    Install PyBaMM via pip or conda on Linux, macOS, or Windows.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Battery Models" icon="battery-full" href="/models/lithium-ion">
+    Explore physics-based models for lithium-ion, lead-acid, sodium-ion, and more.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/simulation">
+    Comprehensive reference for every class, method, and parameter.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Key capabilities
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="Physics-based models" icon="atom">
+    DFN, SPM, SPMe, MPM, MSMR — from full-order to reduced-order models.
+  </Card>
+  <Card title="Multiple solvers" icon="bolt">
+    CasADi, IDAKLU, SciPy, and JAX backends for speed and flexibility.
+  </Card>
+  <Card title="Rich parameter sets" icon="database">
+    Published parameters for Chen2020, Marquis2019, OKane2022, and many more.
+  </Card>
+  <Card title="Experiment definition" icon="flask">
+    Define CC, CV, rest, and hold steps with plain-text experiment strings.
+  </Card>
+  <Card title="Batch studies" icon="chart-bar">
+    Sweep parameters and compare models with BatchStudy.
+  </Card>
+  <Card title="Interactive plots" icon="chart-line">
+    Built-in QuickPlot with interactive visualization of any model variable.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Quick example
 
-## Need inspiration?
+Run a constant-current/constant-voltage charge cycle:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+```python
+import pybamm
+
+experiment = pybamm.Experiment(
+    [
+        (
+            "Discharge at C/10 for 10 hours or until 3.3 V",
+            "Rest for 1 hour",
+            "Charge at 1 A until 4.1 V",
+            "Hold at 4.1 V until 50 mA",
+            "Rest for 1 hour",
+        )
+    ]
+    * 3,
+)
+model = pybamm.lithium_ion.DFN()
+sim = pybamm.Simulation(model, experiment=experiment)
+sim.solve()
+sim.plot()
+```
+
+## Supported battery chemistries
+
+<CardGroup cols={2}>
+  <Card title="Lithium-ion" icon="zap" href="/models/lithium-ion">
+    SPM, SPMe, DFN, MPM, MSMR, Newman-Tobias, Yang2017 — full suite of Li-ion models.
+  </Card>
+  <Card title="Lead-acid" icon="car-battery" href="/models/lead-acid">
+    Isothermal porous-electrode and quasi-static models for lead-acid batteries.
+  </Card>
+  <Card title="Equivalent circuit" icon="circuit-board" href="/models/equivalent-circuit">
+    Thevenin and other ECM models for fast, empirical simulation.
+  </Card>
+  <Card title="Sodium-ion" icon="atom" href="/models/sodium-ion">
+    Physics-based models adapted for sodium-ion chemistries.
+  </Card>
+</CardGroup>
+
+## Installation
+
+<CodeGroup>
+
+```bash pip
+pip install pybamm
+```
+
+```bash conda
+conda install -c conda-forge pybamm
+```
+
+</CodeGroup>
+
+PyBaMM is available on Linux, macOS, and Windows for Python 3.10–3.14.
+
+<Note>
+  PyBaMM is a NumFOCUS fiscally sponsored project. If PyBaMM is useful in your research, consider [citing the paper](https://doi.org/10.5334/jors.309) and making a [tax-deductible donation](https://numfocus.org/donate-for-pybamm).
+</Note>

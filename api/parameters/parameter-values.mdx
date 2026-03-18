@@ -1,0 +1,243 @@
+---
+title: ParameterValues
+description: The ParameterValues class manages all physical and model parameters for a PyBaMM simulation, providing a dictionary-like interface for getting, setting, and processing parameters.
+---
+
+`pybamm.ParameterValues` is the central object for managing parameters in a simulation. It stores scalar constants, callables, and interpolant data, and provides methods to substitute those values into a symbolic model or geometry.
+
+## Constructor
+
+```python
+pybamm.ParameterValues(values)
+```
+
+<ParamField path="values" type="dict | str | ParameterValues" required>
+  The parameter data to load. Accepts:
+  - A plain `dict` mapping parameter names to values.
+  - A `str` matching the name of a built-in parameter set (e.g. `"Chen2020"`).
+  - An existing `ParameterValues` instance (copy constructor).
+</ParamField>
+
+```python
+import pybamm
+
+# Load a built-in parameter set
+param = pybamm.ParameterValues("Chen2020")
+print(param["Current function [A]"])  # 5.0
+
+# Build from a plain dict
+param2 = pybamm.ParameterValues({"Temperature [K]": 298.15})
+```
+
+---
+
+## Class Methods
+
+### `create_from_bpx`
+
+Create a `ParameterValues` instance directly from a [BPX](https://bpxstandard.com/) JSON file.
+
+```python
+ParameterValues.create_from_bpx(filename, target_soc=1.0)
+```
+
+<ParamField path="filename" type="str | Path" required>
+  Path to the `.json` BPX file.
+</ParamField>
+
+<ParamField path="target_soc" type="float" default="1.0">
+  State of charge used to calculate the initial electrode concentrations. Must be between 0 and 1.
+</ParamField>
+
+```python
+param = pybamm.ParameterValues.create_from_bpx("my_cell.json")
+param = pybamm.ParameterValues.create_from_bpx("my_cell.json", target_soc=0.5)
+```
+
+### `create_from_bpx_obj`
+
+Same as `create_from_bpx` but accepts a pre-parsed `dict` instead of a file path.
+
+```python
+ParameterValues.create_from_bpx_obj(bpx_obj, target_soc=1.0)
+```
+
+### `from_json`
+
+Load parameters that were previously saved with `to_json`.
+
+```python
+param = pybamm.ParameterValues.from_json("parameters.json")
+```
+
+---
+
+## Dictionary Interface
+
+`ParameterValues` behaves like a `dict`. You can read, write, and iterate over entries with standard Python syntax.
+
+### `__getitem__` / `__setitem__`
+
+```python
+# Read
+T = param["Reference temperature [K]"]
+
+# Write / overwrite
+param["Current function [A]"] = 2.0
+
+# Add a new parameter
+param["My custom parameter"] = 42.0
+
+# Mark a parameter as a run-time input
+param["Current function [A]"] = "[input]"
+```
+
+### `get`
+
+Return the value for a key, or `default` if the key is absent.
+
+```python
+val = param.get("Current function [A]")        # 5.0
+val = param.get("NonExistent Parameter", 0.0)  # 0.0
+```
+
+### `update`
+
+Merge a dictionary of new or updated values into the existing store.
+
+```python
+ParameterValues.update(values, *, check_conflict=False, check_already_exists=False, path="")
+```
+
+<ParamField path="values" type="dict" required>
+  Mapping of parameter name → new value.
+</ParamField>
+
+```python
+param.update({
+    "Current function [A]": 2.0,
+    "Reference temperature [K]": 300.0,
+})
+```
+
+### `search`
+
+Print (or return) all keys that contain the search string.
+
+```python
+ParameterValues.search(key, print_values=True)
+```
+
+<ParamField path="key" type="str" required>
+  Substring to search for in parameter names.
+</ParamField>
+
+<ParamField path="print_values" type="bool" default="True">
+  Whether to print the matching parameters to stdout.
+</ParamField>
+
+```python
+param.search("electrolyte")
+# Results for 'electrolyte':
+#   Electrolyte diffusivity [m2.s-1]  : <function ...>
+#   Electrolyte conductivity [S.m-1]  : <function ...>
+```
+
+---
+
+## Processing Methods
+
+These methods substitute the stored values into symbolic PyBaMM objects.
+
+### `process_model`
+
+Walk through a model and replace every `pybamm.Parameter` node with the corresponding stored value.
+
+```python
+ParameterValues.process_model(unprocessed_model, inplace=True, delayed_variable_processing=None)
+```
+
+<ParamField path="unprocessed_model" type="pybamm.BaseModel" required>
+  The symbolic model returned by e.g. `pybamm.lithium_ion.SPM()`.
+</ParamField>
+
+<ParamField path="inplace" type="bool" default="True">
+  If `True`, modify the model in place and return it. If `False`, return a new parameterised copy.
+</ParamField>
+
+<ParamField path="delayed_variable_processing" type="bool | None" default="None">
+  If `True`, variable processing is deferred to a post-processing step.
+</ParamField>
+
+<ResponseField name="returns" type="pybamm.BaseModel">
+  The parameterised model.
+</ResponseField>
+
+```python
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+processed = param.process_model(model)
+```
+
+### `process_geometry`
+
+Substitute parameter values into a geometry dictionary (in place).
+
+```python
+ParameterValues.process_geometry(geometry)
+```
+
+<ParamField path="geometry" type="dict" required>
+  Geometry dict, typically created with `pybamm.battery_geometry()`.
+</ParamField>
+
+```python
+geometry = pybamm.battery_geometry()
+param.process_geometry(geometry)
+```
+
+### `process_symbol`
+
+Replace all `Parameter` nodes in a single symbolic expression.
+
+```python
+result = param.process_symbol(pybamm.Parameter("Current function [A]"))
+```
+
+---
+
+## Serialisation
+
+### `to_json`
+
+Convert the parameter store to a JSON-serialisable `dict` and optionally write to disk.
+
+```python
+data = param.to_json()                  # returns dict
+param.to_json("parameters.json")        # saves to file
+```
+
+---
+
+## Full Simulation Example
+
+```python
+import pybamm
+import numpy as np
+
+model = pybamm.lithium_ion.DFN()
+
+param = pybamm.ParameterValues("Chen2020")
+
+# Override one parameter
+param["Current function [A]"] = 2.0
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sol = sim.solve([0, 3600])
+
+print(sol["Terminal voltage [V]"].entries[-1])
+```
+
+<Note>
+  Physical constants (Faraday constant, ideal gas constant, etc.) were previously stored in `ParameterValues`. They are now deprecated there — use `pybamm.constants.F`, `pybamm.constants.R`, etc. instead.
+</Note>

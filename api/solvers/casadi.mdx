@@ -1,0 +1,143 @@
+---
+title: CasadiSolver
+description: PyBaMM's CasadiSolver uses the CasADi symbolic framework and SUNDIALS integrators to solve ODE and DAE battery models. It supports event detection through a configurable "mode" parameter.
+---
+
+`pybamm.CasadiSolver` wraps the CasADi integrator (backed by SUNDIALS CVODES/IDA) and adds battery-specific logic for event detection and step-and-check integration.
+
+## Constructor
+
+```python
+pybamm.CasadiSolver(
+    mode="safe",
+    rtol=1e-6,
+    atol=1e-6,
+    root_method="casadi",
+    root_tol=1e-6,
+    max_step_decrease_count=5,
+    dt_max=None,
+    extrap_tol=None,
+    on_extrapolation=None,
+    extra_options_setup=None,
+    extra_options_call=None,
+    return_solution_if_failed_early=False,
+    perturb_algebraic_initial_conditions=None,
+    integrators_maxcount=100,
+)
+```
+
+<ParamField path="mode" type="str" default="&quot;safe&quot;">
+  Integration strategy. See [Modes](#modes) below.
+</ParamField>
+
+<ParamField path="rtol" type="float" default="1e-6">
+  Relative tolerance for the integrator.
+</ParamField>
+
+<ParamField path="atol" type="float" default="1e-6">
+  Absolute tolerance for the integrator.
+</ParamField>
+
+<ParamField path="root_method" type="str" default="&quot;casadi&quot;">
+  Method for computing consistent initial conditions for DAE systems. `"casadi"` uses CasADi's Newton rootfinder. Any valid `scipy.optimize.root` method string (e.g. `"lm"`, `"hybr"`) is also accepted.
+</ParamField>
+
+<ParamField path="root_tol" type="float" default="1e-6">
+  Tolerance for the root-finding step.
+</ParamField>
+
+<ParamField path="max_step_decrease_count" type="int" default="5">
+  Maximum number of times the step size may be halved before raising an error.
+</ParamField>
+
+<ParamField path="dt_max" type="float | None" default="600">
+  Maximum global step size (seconds) in `"safe"` mode. Defaults to 600 s when `None`.
+</ParamField>
+
+<ParamField path="extrap_tol" type="float | None" default="0">
+  Tolerance for detecting extrapolation beyond the solved interval.
+</ParamField>
+
+<ParamField path="on_extrapolation" type="str" default="&quot;error&quot;">
+  Behaviour when extrapolation is detected: `"error"`, `"warn"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="extra_options_setup" type="dict | None" default="{}">
+  Options forwarded to the CasADi integrator at creation time. Useful keys include `"max_num_steps"` and `"print_stats"`. See the [CasADi docs](https://web.casadi.org/python-api/#integrator) for the full list.
+</ParamField>
+
+<ParamField path="extra_options_call" type="dict | None" default="{}">
+  Options forwarded to the CasADi integrator at call time.
+</ParamField>
+
+<ParamField path="return_solution_if_failed_early" type="bool" default="false">
+  If `True`, return a partial `Solution` when the solver fails mid-simulation instead of raising an error.
+</ParamField>
+
+<ParamField path="perturb_algebraic_initial_conditions" type="bool | None" default="None">
+  Whether to perturb algebraic initial conditions to avoid singularities. Defaults to `True` in `"safe"` mode, `False` otherwise.
+</ParamField>
+
+<ParamField path="integrators_maxcount" type="int" default="100">
+  LRU cache size for compiled CasADi integrators. Set to `0` for unbounded caching.
+</ParamField>
+
+---
+
+## Modes
+
+| Mode | Description | Recommended for |
+|------|-------------|----------------|
+| `"safe"` | Step-and-check in global steps of `dt_max`, detecting events | Full charge/discharge cycles |
+| `"fast"` | Direct integration; events are not tracked | Drive cycles, no cut-off events |
+| `"fast with events"` | Direct integration then retroactively locates events (**experimental**) | Testing |
+| `"safe without grid"` | Step-by-step without pre-building the time grid (**experimental**) | Memory-constrained runs |
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```python Discharge with events
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+param = pybamm.ParameterValues("Chen2020")
+
+solver = pybamm.CasadiSolver(mode="safe", rtol=1e-6, atol=1e-6)
+
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+sol = sim.solve([0, 3600])
+print(sol["Terminal voltage [V]"].entries[-1])
+```
+
+```python Drive cycle (fast mode)
+import pybamm
+import numpy as np
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+
+# "fast" mode skips event checking — ideal for drive cycles
+solver = pybamm.CasadiSolver(mode="fast")
+
+t = np.linspace(0, 1800, 1000)
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+sol = sim.solve(t)
+```
+
+```python Increase max integrator steps
+import pybamm
+
+solver = pybamm.CasadiSolver(
+    mode="safe",
+    extra_options_setup={"max_num_steps": 10000},
+)
+```
+
+</CodeGroup>
+
+<Warning>
+  `"fast with events"` and `"safe without grid"` modes are experimental and may change without notice.
+</Warning>

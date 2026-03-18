@@ -1,0 +1,233 @@
+---
+title: "Changelog"
+description: "Release history for PyBaMM, including new features, bug fixes, and breaking changes."
+---
+
+PyBaMM uses **CalVer** versioning in the format `YY.MM.PATCH` (e.g., `25.12.0`). Major releases occur roughly every two months.
+
+<Note>
+  **Deprecation policy**: breaking changes follow a deprecation window of at least one year or three releases (whichever is longer). Deprecated APIs emit a warning before removal so you have time to migrate.
+</Note>
+
+The entries below cover the most recent releases. View the [full changelog on GitHub](https://github.com/pybamm-team/PyBaMM/blob/main/CHANGELOG.md) for the complete history.
+
+## Unreleased
+
+<AccordionGroup>
+  <Accordion title="Features">
+    - Improved the performance of processed variables by replacing `casadi.vertcat` input stacking with numpy vectors.
+    - Preserve custom variables and events in built-in model `to_config`.
+    - Allow out-of-bounds initial state of charge to enable initialising a simulation at a voltage outside the voltage limits.
+    - Added `cache_esoh` option to `Simulation` that caches the electrode SOH computation across repeated `solve` calls.
+    - Eliminated the mass matrix inverse and temporary dense matrix objects when building the simulation.
+    - Added the `hermite_reduction_factor` option to `IDAKLUSolver`, which dynamically compresses solution size by removing redundant points in the Hermite interpolant.
+    - Added support for Python 3.14.
+    - Added regularisation to the kinetics and OCPs for improved numerical stability.
+    - DiffSL export for discretised PyBaMM models.
+  </Accordion>
+  <Accordion title="Bug fixes">
+    - Fixed a bug in the exchange current density calculation for MSMR models.
+    - Fixed a bug where converting `ExpressionFunctionParameter` to source code did not preserve `Interpolant` constructor calls with data arrays.
+    - Fixed a bug where bounds of the particle size distribution were always taken from the primary phase when using 2 phases with particle size distribution.
+  </Accordion>
+  <Accordion title="Breaking changes">
+    - The mass matrix inverse is no longer computed during discretisation; solvers now use sparse linear solves instead.
+    - Dropped JAX support on macOS with Intel (x86\_64) processors. macOS users require Apple Silicon (M-series) for JAX features.
+    - Added a small regularisation term to the exchange current density, slightly modifying kinetics as stoichiometry approaches 0 or 1.
+    - The default OCP barrier as stoichiometry approaches 0 or 1 is now smooth instead of asymptotically approaching infinity.
+    - Migrated `docs` and `dev` dependencies from `project.optional-dependencies` to `dependency-groups` per PEP 735.
+  </Accordion>
+</AccordionGroup>
+
+## v25.12 — January 2026
+
+<AccordionGroup>
+  <Accordion title="v25.12.2 — 2026-01-22">
+    **Features**
+
+    - Added experimental `CompositeSolver` that tries multiple solvers until one succeeds, and updated the ESOH solvers to use a composite algebraic solver.
+  </Accordion>
+
+  <Accordion title="v25.12.1 — 2026-01-21">
+    **Features**
+
+    - Improved the robustness of the `ElectrodeSOHComposite` model and made the calculation of equilibrium stoichiometries consistent for models with hysteresis.
+
+    **Bug fixes**
+
+    - Fixed a bug where `ExpressionFunctionParameter` children were not properly substituted after JSON deserialisation, causing `ElectrodeSOHSolver` to fail with "Variable not implemented" errors.
+  </Accordion>
+
+  <Accordion title="v25.12.0 — 2026-01-15">
+    **Features**
+
+    - Porosity and active material fractions are now `FunctionParameters` of y and z, as well as x.
+    - Added support for asymmetric loss of active material.
+    - Added `Solution.yp` property to return the time derivatives of the solution.
+    - Added `TensorField` for rank-1 and rank-2 tensors, `TensorProduct` for outer products, and tensor divergence support in 2D finite volume.
+    - Added support for Python 3.13.
+    - Reduced the time to build `Simulation`s by creating a post-processing step for variables.
+    - Added the ability to observe custom variables from a `Solution` object using `Solution.observe(symbol)`.
+    - Added inverse kinetics for linear kinetics.
+
+    **Bug fixes**
+
+    - Fixed a bug where `fixed_input_parameters` ignored `InputParameter` values within expressions in `ParameterValues`.
+    - Fixed a bug with domain shape evaluation.
+    - Fixed a bug where `IDAKLUSolver` errors were not raised correctly.
+
+    **Breaking changes**
+
+    - Removed default constants added to `ParameterValues` on construction. Only breaking if you rely on this in custom models or parameters.
+  </Accordion>
+</AccordionGroup>
+
+## v25.10 — October–November 2025
+
+<AccordionGroup>
+  <Accordion title="v25.10.2 — 2025-11-27">
+    **Bug fixes**
+
+    - Fixed a bug with serialising `InputParameter`s.
+    - Fixed a bug with missing inputs for `initial_conditions_from` scale evaluation.
+  </Accordion>
+
+  <Accordion title="v25.10.1 — 2025-11-14">
+    **Features**
+
+    - Allow setting initial conditions from `y_slices` of a `Solution` object.
+
+    **Bug fixes**
+
+    - Fixed a bug where simulations whose initial conditions violated the events could continue solving.
+    - Fixed an issue with composite electrode and "swelling only" mechanics sub-models not creating the cell thickness variable.
+  </Accordion>
+
+  <Accordion title="v25.10.0 — 2025-10-29">
+    **Features**
+
+    - Added uniform grid sizing across subdomains in the x-dimension.
+    - Added `electrode_phases` kwarg to `plot_voltage_components()` to choose between primary or secondary phase overpotentials.
+    - Added `num_steps_no_progress` and `t_no_progress` options to `IDAKLUSolver` for early termination when little progress is detected.
+    - Added helper functions to import external 3D meshes.
+    - Added support for algebraic and differential surface form in composite models.
+    - Generalised `set_initial_soc` to `set_initial_state` and added Thevenin initial state setting.
+
+    **Bug fixes**
+
+    - Fixed `KeyError: 'min'` in `latexify()` for lithium plating models when certain geometry keys are missing.
+    - Fixed a bug where no error was raised when a list of input sets was provided to the solver while using `Experiment`.
+    - Fixed a bug where simulations using `output_variables` in `IDAKLUSolver` couldn't be pickled.
+    - Fixed a bug where time-based Heaviside or modulo discontinuities could trigger out-of-bounds errors in time arrays.
+
+    **Breaking changes**
+
+    - Updated hysteresis decay rate parameters to a "true" hysteresis decay rate, changing the unit interpretation.
+    - Changed fundamental variable for all SEI models from thickness to concentration.
+  </Accordion>
+</AccordionGroup>
+
+## v25.8 — August 2025
+
+<AccordionGroup>
+  <Accordion title="v25.8.0 — 2025-08-04">
+    **Features**
+
+    - Added `plot_3d_cross_section` and `plot_3d_heatmap` functions for 3D thermal simulation plots.
+    - Added `Basic3DThermalSPM` model with two-way coupling.
+    - Added `on_failure` option to `BaseSolver` with choices `"warn"`, `"ignore"`, and `"raise"`.
+    - Introduced entry points for models (similar to parameter sets), enabling experimental support for loading third-party models via `pybamm.Model("model_name")`.
+    - Added 3D FEM and meshes supporting rectangular and cylindrical geometries.
+    - Added a `Constant` symbol for named constants (subclass of `Scalar`) to prevent constants from being simplified away.
+    - Added an option for multiple initial conditions in the IDAKLU solver.
+
+    **Bug fixes**
+
+    - Fixed domain handling and temperature initialisation in the lumped thermal model.
+    - Fixed non-deterministic `ShapeError` in the 3D FEM gradient method.
+    - Fixed a bug that ignored the default duration of drive cycles for `CRate` steps.
+    - Fixed inconsistency in the returned shape of `pybamm.DiscreteTimeSum` depending on whether `output_variables` was set.
+
+    **Breaking changes**
+
+    - Changed behaviour of drive cycle steps in `pybamm.Experiment` to treat each time point as a discontinuity.
+    - Changed `A_cc = L_z * L_y * number of layers`, altering the interpretation of electrode capacity variables.
+    - Removed IREE code from the IDAKLU solver.
+    - Removed support for Python 3.9.
+    - OCP hysteresis models now require explicit equilibrium, delithiation, and lithiation OCPs.
+  </Accordion>
+</AccordionGroup>
+
+## v25.6 — May 2025
+
+<AccordionGroup>
+  <Accordion title="v25.6.0 — 2025-05-27">
+    **Features**
+
+    - Renamed MSMR parameters from symbols to written-out names with units (non-breaking, with deprecation warning).
+
+    **Optimisations**
+
+    - Updated docs, examples, and tests to use `IDAKLUSolver` as the recommended solver.
+    - Added `on_extrapolation` solver option (`"error"`, `"warn"`, or `"ignore"`).
+    - Improved reliability of `CasadiAlgebraicSolver` with a `step_tol` option for the Newton iteration.
+    - Sped up calculation of variable sensitivities in `ProcessedVariable`.
+
+    **Bug fixes**
+
+    - Fixed `QuickPlot` returning empty values for 1D variables at the beginning and end of a timespan.
+    - Fixed `Exponential1DSubMesh` not being created correctly for non-zero minimum values.
+
+    **Breaking changes**
+
+    - Removed sensitivity functionality from CasADi and SciPy solvers; only `pybamm.IDAKLUSolver` can calculate sensitivities.
+  </Accordion>
+</AccordionGroup>
+
+## v25.4 — April 2025
+
+<AccordionGroup>
+  <Accordion title="v25.4.2 — 2025-04-17">
+    **Bug fixes**
+
+    - Improved reliability of `AlgebraicSolver` and changed `ElectrodeSOHHalfCell` solver to a Trust-Region method.
+  </Accordion>
+
+  <Accordion title="v25.4.1 — 2025-04-16">
+    **Features**
+
+    - Added "use lumped thermal capacity" option in the lumped thermal model.
+
+    **Bug fixes**
+
+    - Removed an incorrect regularisation term in the harmonic mean.
+
+    **Breaking changes**
+
+    - Changed default solver to `pybamm.IDAKLUSolver`.
+  </Accordion>
+
+  <Accordion title="v25.4.0 — 2025-04-02">
+    **Features**
+
+    - Added `axen_ocp` module for OCP with hysteresis within `interface.open_circuit_potential`.
+    - Added `get_summary_variables` to return a dictionary of computed summary variables.
+    - Added support for particle size distributions combined with particle mechanics.
+    - Added `InputParameter` support in PyBaMM experiments.
+    - Added support for the `"pchip"` interpolator using the CasADI backend.
+
+    **Breaking changes**
+
+    - Added `skip_ok` option to `step` to allow infeasible steps to be skipped at initial conditions.
+    - Deprecated `CrateTermination` and renamed it to `CRateTermination`.
+
+    **Bug fixes**
+
+    - Fixed a bug with observing outputs of 2D FEM simulations.
+    - Fixed a bug in simulating FEM models with `IDAKLUSolver`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+For older releases (v25.1, v24.x, and earlier), see the [full CHANGELOG on GitHub](https://github.com/pybamm-team/PyBaMM/blob/main/CHANGELOG.md).

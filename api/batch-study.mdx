@@ -1,0 +1,209 @@
+---
+title: BatchStudy
+description: BatchStudy runs and compares multiple PyBaMM simulations in a single call. It supports both element-wise pairing and full Cartesian products of models, solvers, and experimental conditions.
+---
+
+`pybamm.BatchStudy` is a convenience class for running comparative studies across multiple models, solvers, parameter sets, or experimental conditions.
+
+## Constructor
+
+```python
+pybamm.BatchStudy(
+    models,
+    experiments=None,
+    geometries=None,
+    parameter_values=None,
+    submesh_types=None,
+    var_pts=None,
+    spatial_methods=None,
+    solvers=None,
+    output_variables=None,
+    C_rates=None,
+    repeats=1,
+    permutations=False,
+)
+```
+
+<ParamField path="models" type="dict" required>
+  Dictionary of `name → model` pairs. The models to simulate.
+</ParamField>
+
+<ParamField path="experiments" type="dict | None" default="None">
+  Dictionary of experimental conditions keyed by name.
+</ParamField>
+
+<ParamField path="geometries" type="dict | None" default="None">
+  Dictionary of geometry overrides keyed by name.
+</ParamField>
+
+<ParamField path="parameter_values" type="dict | None" default="None">
+  Dictionary of `ParameterValues` objects keyed by name.
+</ParamField>
+
+<ParamField path="submesh_types" type="dict | None" default="None">
+  Dictionary of submesh-type dicts keyed by name.
+</ParamField>
+
+<ParamField path="var_pts" type="dict | None" default="None">
+  Dictionary of `var_pts` dicts keyed by name.
+</ParamField>
+
+<ParamField path="spatial_methods" type="dict | None" default="None">
+  Dictionary of spatial-method dicts keyed by name.
+</ParamField>
+
+<ParamField path="solvers" type="dict | None" default="None">
+  Dictionary of solver objects keyed by name.
+</ParamField>
+
+<ParamField path="output_variables" type="dict | None" default="None">
+  Dictionary of variable lists for plotting, keyed by name.
+</ParamField>
+
+<ParamField path="C_rates" type="dict | None" default="None">
+  Dictionary of C-rates for constant-current (dis)charge simulations, keyed by name.
+</ParamField>
+
+<ParamField path="repeats" type="int" default="1">
+  Number of times each simulation is solved. The reported solve time is the average across repeats. Useful for benchmarking.
+</ParamField>
+
+<ParamField path="permutations" type="bool" default="false">
+  - `False` (default): pair elements by position — first model with first solver, etc.
+  - `True`: run the full Cartesian product of models × solvers × experiments.
+</ParamField>
+
+<Note>
+  When `permutations=False`, every provided dict must have the same number of entries as `models`, or a `ValueError` is raised.
+</Note>
+
+---
+
+## `solve`
+
+```python
+BatchStudy.solve(
+    t_eval=None,
+    solver=None,
+    save_at_cycles=None,
+    calc_esoh=True,
+    starting_solution=None,
+    initial_soc=None,
+    t_interp=None,
+    **kwargs,
+)
+```
+
+Solves all simulations and stores the results in `self.sims`. Parameters mirror `pybamm.Simulation.solve`.
+
+---
+
+## `plot`
+
+```python
+BatchStudy.plot(output_variables=None, **kwargs)
+```
+
+Open an interactive `dynamic_plot` comparing all simulations. Returns the `QuickPlot` instance.
+
+---
+
+## `create_gif`
+
+```python
+BatchStudy.create_gif(
+    number_of_images=80,
+    duration=0.1,
+    output_filename="plot.gif",
+)
+```
+
+Render a GIF of the `dynamic_plot` across the solution time span.
+
+<ParamField path="number_of_images" type="int" default="80">
+  Number of frames.
+</ParamField>
+
+<ParamField path="duration" type="float" default="0.1">
+  Duration (seconds) of each frame.
+</ParamField>
+
+<ParamField path="output_filename" type="str" default="&quot;plot.gif&quot;">
+  Output file path.
+</ParamField>
+
+---
+
+## Accessing Results
+
+After calling `solve()`, the `sims` attribute holds the list of solved `pybamm.Simulation` objects:
+
+```python
+batch.solve([0, 3600])
+
+for sim in batch.sims:
+    sol = sim.solution
+    print(sol["Terminal voltage [V]"].entries[-1])
+    print(f"Solve time: {sol.solve_time:.3f} s")
+```
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```python Compare SPM vs DFN
+import pybamm
+
+batch = pybamm.BatchStudy(
+    models={
+        "SPM": pybamm.lithium_ion.SPM(),
+        "DFN": pybamm.lithium_ion.DFN(),
+    },
+    parameter_values={
+        "SPM": pybamm.ParameterValues("Chen2020"),
+        "DFN": pybamm.ParameterValues("Chen2020"),
+    },
+)
+
+batch.solve([0, 3600])
+batch.plot()
+```
+
+```python Cartesian product: 2 models × 2 parameter sets
+import pybamm
+
+batch = pybamm.BatchStudy(
+    models={
+        "SPM": pybamm.lithium_ion.SPM(),
+        "DFN": pybamm.lithium_ion.DFN(),
+    },
+    parameter_values={
+        "Chen2020": pybamm.ParameterValues("Chen2020"),
+        "Marquis2019": pybamm.ParameterValues("Marquis2019"),
+    },
+    permutations=True,  # 2 × 2 = 4 simulations
+)
+
+batch.solve([0, 3600])
+batch.plot()
+```
+
+```python Benchmarking with repeats
+import pybamm
+
+batch = pybamm.BatchStudy(
+    models={"DFN": pybamm.lithium_ion.DFN()},
+    solvers={
+        "IDAKLU": pybamm.IDAKLUSolver(),
+    },
+    repeats=5,  # solve 5 times, report average
+)
+
+batch.solve([0, 3600])
+for sim in batch.sims:
+    print(f"Average solve time: {sim.solution.solve_time:.4f} s")
+```
+
+</CodeGroup>

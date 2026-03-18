@@ -1,0 +1,139 @@
+---
+title: "BaseModel"
+description: "The foundation class all PyBaMM models extend, providing the equation system, geometry, and serialisation API."
+---
+
+`pybamm.BaseModel` defines the structure that every PyBaMM model must follow. It stores the equation system (RHS, algebraic equations, initial and boundary conditions), the output variables, and events. Battery-specific models (lithium-ion, lead-acid, ECM) extend `pybamm.BaseBatteryModel`, which itself extends `BaseModel`.
+
+<Note>
+  You do not normally instantiate `BaseModel` directly. Use one of the ready-made model classes such as `pybamm.lithium_ion.DFN()` or `pybamm.lead_acid.Full()`.
+</Note>
+
+## Key attributes
+
+### Equations
+
+<ResponseField name="rhs" type="dict">
+  Right-hand side of the system of ODEs. Maps state variable expressions to their time derivatives.
+
+  ```python
+  model.rhs[c_s] = -divergence(N_s)
+  ```
+</ResponseField>
+
+<ResponseField name="algebraic" type="dict">
+  Algebraic equations for DAE systems. Maps variable expressions to residuals that must equal zero.
+</ResponseField>
+
+<ResponseField name="initial_conditions" type="dict">
+  Initial values for each state variable. Keys match those in `rhs` and `algebraic`.
+</ResponseField>
+
+<ResponseField name="boundary_conditions" type="dict">
+  Boundary conditions for PDEs. Nested dict mapping variable → boundary → `(value, type)` pairs where type is `"Dirichlet"` or `"Neumann"`.
+</ResponseField>
+
+<ResponseField name="variables" type="pybamm.FuzzyDict">
+  Named output expressions. Anything you want to access in the `Solution` (e.g. `sol["Terminal voltage [V]"]`) must be registered here. Supports fuzzy-string lookup.
+</ResponseField>
+
+<ResponseField name="events" type="list[pybamm.Event]">
+  A list of events (zero-crossings) that can terminate a step or the simulation. For example, a minimum voltage event.
+</ResponseField>
+
+<ResponseField name="submodels" type="dict">
+  Named sub-model components that together make up the full model. Sub-models are assembled during `build_model()`.
+</ResponseField>
+
+### Flags
+
+<ResponseField name="use_jacobian" type="bool">
+  Whether to provide an analytic Jacobian to the solver. Default `True`. Setting to `False` can be useful for debugging or for very simple models.
+</ResponseField>
+
+<ResponseField name="convert_to_format" type="str">
+  Format to which expression trees are converted before solving. Options: `None` (retain PyBaMM trees), `"python"` (Python-evaluated), `"casadi"` (default, required for most solvers), `"jax"`.
+</ResponseField>
+
+<ResponseField name="is_discretised" type="bool">
+  `True` after `pybamm.Discretisation` has processed the model.
+</ResponseField>
+
+<ResponseField name="is_parameterised" type="bool">
+  `True` after `pybamm.ParameterValues` has processed the model.
+</ResponseField>
+
+## `build_model()`
+
+Assemble all sub-models into the final equation system. Called automatically by `pybamm.Simulation.build()` and `pybamm.Simulation.solve()`.
+
+```python
+model = pybamm.lithium_ion.DFN(build=False)
+# Modify submodels here
+model.build_model()
+```
+
+<Warning>
+  Sub-models cannot be changed after `build_model()` has been called. Pass `build=False` if you need to customise sub-models before building.
+</Warning>
+
+## Serialisation
+
+### `save_model()` (via `pybamm.Simulation`)
+
+Write a discretised model to JSON. This avoids the cost of re-building and re-discretising on subsequent runs:
+
+```python
+sim = pybamm.Simulation(pybamm.lithium_ion.SPM())
+sim.build()
+sim.save_model("spm_model.json", mesh=True, variables=True)
+```
+
+### `BaseModel.deserialise()`
+
+Class method to restore a model from a serialised property dictionary (used internally by `pybamm.load_model`).
+
+### `to_json()`
+
+Serialise the model (after discretisation) to a JSON-compatible dictionary. Used by the `Serialise` class:
+
+```python
+from pybamm.expression_tree.operations.serialise import Serialise
+
+json_dict = Serialise().serialise(model)
+```
+
+## Geometry and domains
+
+PyBaMM models are defined over named **domains** — e.g. `"negative electrode"`, `"separator"`, `"positive electrode"`. Spatial variables live in these domains, and boundary conditions are applied at domain interfaces.
+
+The geometry is described by a `pybamm.Geometry` dict mapping domain names to spatial extents:
+
+```python
+geometry = pybamm.battery_geometry()
+# {'negative electrode': {x_n: {'min': 0, 'max': l_n}}, ...}
+```
+
+Each model exposes `model.default_geometry`, `model.default_submesh_types`, `model.default_var_pts`, and `model.default_spatial_methods` so that `pybamm.Simulation` can set up the mesh automatically.
+
+## Example: inspecting a built model
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+
+# Inspect variable names
+print(list(model.variables.keys())[:10])
+
+# Inspect events
+for event in model.events:
+    print(event.name)
+
+# Build and inspect the discretised form
+sim = pybamm.Simulation(model)
+sim.build()
+
+print("RHS size:", sim.built_model.concatenated_rhs.size)
+print("Algebraic size:", sim.built_model.concatenated_algebraic.size)
+```

@@ -1,0 +1,223 @@
+---
+title: "Contributing to PyBaMM"
+description: "How to report bugs, propose features, and submit code contributions to the PyBaMM project."
+---
+
+PyBaMM is an open-source project maintained by a community of researchers and engineers. Every contribution — whether a bug report, documentation fix, new parameter set, or major feature — makes the library more useful for everyone.
+
+## Ways to contribute
+
+<Columns cols={2}>
+  <Card title="Bug reports" icon="bug" href="https://github.com/pybamm-team/PyBaMM/issues/new?template=bug_report.md">
+    Found something broken? Open a bug report on GitHub with a minimal reproducible example.
+  </Card>
+  <Card title="Feature requests" icon="lightbulb" href="https://github.com/pybamm-team/PyBaMM/issues/new">
+    Propose new models, solvers, or API improvements by opening an issue for discussion before writing code.
+  </Card>
+  <Card title="Documentation" icon="book-open">
+    Fix typos, clarify explanations, improve docstrings, or add example notebooks to help other users.
+  </Card>
+  <Card title="Parameter sets" icon="database">
+    Add published battery parameter sets with full references so the community can reproduce experimental results.
+  </Card>
+</Columns>
+
+## Development setup
+
+<Steps>
+  <Step title="Fork and clone">
+    Create a fork of the [PyBaMM repository](https://github.com/pybamm-team/PyBaMM) on GitHub, then clone your fork locally:
+
+    ```bash
+    git clone https://github.com/<your-username>/PyBaMM.git
+    cd PyBaMM
+    ```
+
+    Create a new branch for your changes:
+
+    ```bash
+    git checkout -b my-feature-branch
+    ```
+  </Step>
+
+  <Step title="Create a virtual environment">
+    Use a virtual environment to keep your PyBaMM development dependencies isolated:
+
+    <CodeGroup>
+
+    ```bash venv (Linux/macOS)
+    python -m venv .venv
+    source .venv/bin/activate
+    ```
+
+    ```bash venv (Windows)
+    python -m venv .venv
+    .venv\Scripts\activate
+    ```
+
+    ```bash conda
+    conda create -n pybamm-dev python=3.12
+    conda activate pybamm-dev
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install PyBaMM with all dependencies">
+    Install PyBaMM in editable mode together with all optional and development dependencies:
+
+    ```bash
+    pip install -e ".[all]"
+    pip install --group dev
+    ```
+
+    The `[all]` extra installs `scikit-fem`, `meshio`, `matplotlib`, `pybtex`, `bpx`, `tqdm`, and other optional packages. The `dev` dependency group adds `pytest`, `ruff`, `nox`, `pre-commit`, and related tooling.
+
+    <Note>
+      `docs` and `dev` dependencies are declared as [PEP 735 dependency groups](https://peps.python.org/pep-0735/) in `pyproject.toml`. If your pip version does not support `--group`, install them individually or use `uv sync --group dev`.
+    </Note>
+  </Step>
+
+  <Step title="Install pre-commit hooks">
+    PyBaMM uses [pre-commit](https://pre-commit.com/) to run code style and quality checks automatically on every commit:
+
+    ```bash
+    pip install pre-commit
+    pre-commit install
+    ```
+
+    To run all checks immediately on every file (without committing):
+
+    ```bash
+    pre-commit run --all-files
+    ```
+
+    Hooks include `ruff-check`, `ruff-format`, `blacken-docs`, and several file-integrity checks. See `.pre-commit-config.yaml` for the full list.
+  </Step>
+
+  <Step title="Run the test suite">
+    Verify your installation by running the unit tests:
+
+    <CodeGroup>
+
+    ```bash nox
+    nox -s unit
+    ```
+
+    ```bash pytest
+    pytest -m unit
+    ```
+
+    </CodeGroup>
+
+    To also run integration tests:
+
+    ```bash
+    nox -s tests
+    ```
+
+    All tests should pass before you open a pull request.
+  </Step>
+</Steps>
+
+## Code style
+
+PyBaMM follows [PEP 8](https://www.python.org/dev/peps/pep-0008/) and enforces it automatically with [ruff](https://github.com/astral-sh/ruff).
+
+### Ruff
+
+Ruff handles both linting and formatting. Run it manually at any time:
+
+```bash
+python -m pip install pre-commit
+pre-commit run ruff
+```
+
+When you commit, ruff runs automatically via the pre-commit hooks. Ruff is configured in `pyproject.toml` under `[tool.ruff]`.
+
+### Naming conventions
+
+- **Classes**: CamelCase starting with an uppercase letter — e.g., `MyBatteryModel`.
+- **Methods and variables**: lowercase with underscores — e.g., `iteration_count`.
+- Prefer descriptive names over abbreviations: `mean` is better than `mu`.
+
+## Testing
+
+Every new feature or bug fix must include tests. PyBaMM uses [pytest](https://docs.pytest.org/) with the following plugins:
+
+| Plugin | Purpose |
+|---|---|
+| `pytest-xdist` | Run tests in parallel (`-nauto` by default) |
+| `nbmake` | Test example Jupyter notebooks |
+| `pytest-mock` | Mocking and patching |
+| `hypothesis` | Property-based testing |
+
+### Nox sessions
+
+| Command | What it runs |
+|---|---|
+| `nox -s unit` | Unit tests only |
+| `nox -s tests` | Unit and integration tests |
+| `nox -s examples` | All example notebooks in `docs/source/examples/` |
+| `nox -s scripts` | All example scripts in `examples/` |
+| `nox -s docs` | Build the documentation and serve at `http://127.0.0.1:8000` |
+
+### Running a single test
+
+```bash
+pytest tests/unit/test_plotting/test_quick_plot.py::TestQuickPlot::test_simple_ode_model
+```
+
+You can pass the same path as a positional argument to nox:
+
+```bash
+nox -s tests -- tests/unit/test_plotting/test_quick_plot.py::TestQuickPlot::test_simple_ode_model
+```
+
+### Writing tests
+
+Look in the `tests/` directory for a test covering a similar method, copy it as a starting point, and add `assert` statements to verify your output. Tests should be fast — unit tests check individual functions, integration tests check end-to-end behaviour.
+
+<Tip>
+  To isolate a flaky test without deleting it, use `@pytest.mark.skip("")` on the test method.
+</Tip>
+
+## Adding citations
+
+PyBaMM automatically tracks which papers are used by a simulation. When your code is used, PyBaMM can cite the relevant publications:
+
+```python
+pybamm.print_citations()
+```
+
+To add a citation for your contribution:
+
+1. Add the BibTeX entry for your paper to [`src/pybamm/CITATIONS.bib`](https://github.com/pybamm-team/PyBaMM/blob/main/src/pybamm/CITATIONS.bib).
+2. Register the citation in the code where it is used:
+
+```python
+pybamm.citations.register("your_paper_bibtex_identifier")
+```
+
+Place the `register` call in the `__init__` method of a model or solver class, or inside the function that uses the cited method. Pass a filename to `print_citations` to write BibTeX to a file instead of printing to the terminal.
+
+## Pull request process
+
+1. **Open an issue first** for any non-trivial change so the approach can be discussed before you write code.
+2. **Write and test your code**, following the style guidelines above.
+3. **Run `pre-commit run --all-files`** and fix any remaining issues.
+4. **Run `nox -s unit`** (at minimum) to confirm all tests pass.
+5. **Open a pull request** on [PyBaMM's GitHub page](https://github.com/pybamm-team/PyBaMM). Describe what the change does and why.
+6. A community member will review your PR. Address any requested changes by pushing new commits to the same branch.
+7. Once approved, a maintainer with write access will merge the PR.
+
+<Note>
+  GitHub Actions runs the full test suite against every pull request across multiple operating systems and all supported Python versions (3.10–3.14). A green check on all workflows is required before merging.
+</Note>
+
+## Community
+
+- **Discourse forum**: [https://www.pybamm.org/](https://www.pybamm.org/) — ask questions and discuss ideas with other PyBaMM users and developers.
+- **GitHub issues**: [github.com/pybamm-team/PyBaMM/issues](https://github.com/pybamm-team/PyBaMM/issues) — bug reports and feature requests.
+- **GitHub discussions**: for broader questions about the project direction.
+- **Contact**: [pybamm@pybamm.org](mailto:pybamm@pybamm.org)

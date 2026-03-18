@@ -1,0 +1,357 @@
+---
+title: "Lithium-Ion Models"
+description: "Overview of the physics-based lithium-ion battery models available in PyBaMM, including SPM, SPMe, DFN, MPM, MSMR, Newman-Tobias, and Yang2017."
+---
+
+PyBaMM provides several physics-based lithium-ion battery models that span a wide range of fidelity and computational cost. All models are accessible from the `pybamm.lithium_ion` namespace.
+
+## Model comparison
+
+<CardGroup cols={2}>
+  <Card title="SPM" icon="bolt">
+    Fastest. Ignores electrolyte dynamics. Best for rapid parameter sweeps and reduced-order studies.
+  </Card>
+  <Card title="SPMe" icon="gauge">
+    Adds electrolyte concentration and potential corrections to the SPM. Good balance for most simulations.
+  </Card>
+  <Card title="DFN" icon="flask">
+    Full porous-electrode model. Highest fidelity for single-cell physics-based simulation.
+  </Card>
+  <Card title="MPM" icon="chart-bar">
+    Extends the SPM with a particle-size distribution. Captures heterogeneous utilisation effects.
+  </Card>
+  <Card title="MSMR" icon="atom">
+    Multi-Site Multi-Reaction model. Uses thermodynamic site-occupancy formulations for OCP and kinetics.
+  </Card>
+  <Card title="Newman-Tobias" icon="book">
+    DFN-class model with uniform electrolyte concentration. Useful as a pedagogical reference.
+  </Card>
+</CardGroup>
+
+| Model | Electrolyte dynamics | Particle distribution | Relative cost |
+|---|---|---|---|
+| SPM | No | No | Low |
+| SPMe | Yes (composite) | No | Medium |
+| DFN | Yes (full) | No | High |
+| MPM | No | Yes | Medium |
+| MSMR | Yes (full) | No | High |
+| Newman-Tobias | No (uniform) | No | Medium |
+| Yang2017 | Yes (full) | No | High |
+
+---
+
+## Models
+
+<Tabs>
+  <Tab title="SPM">
+
+### Single Particle Model
+
+The `SPM` reduces each electrode to a single representative spherical particle. Electrolyte concentration gradients are neglected, and the overpotential is determined from the leading-order electrolyte conductivity. This is the fastest lithium-ion model in PyBaMM.
+
+**When to use:** Rapid parameter studies, state estimation, control design, or situations where electrolyte dynamics are unimportant (low C-rates).
+
+**Reference:** Marquis, S. G., et al. (2019). *An asymptotic derivation of a single particle model with electrolyte*. Journal of The Electrochemical Society.
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+print(model.name)  # 'Single Particle Model'
+
+# Solve with default parameters
+param = model.default_parameter_values
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="SPMe">
+
+### Single Particle Model with Electrolyte
+
+The `SPMe` extends the SPM by including corrections for electrolyte concentration and potential using a composite asymptotic expansion. It inherits particle submodels from the SPM and replaces only the electrolyte and electrode potential submodels.
+
+**When to use:** Simulations that need to capture electrolyte depletion effects without the full cost of DFN. A good default choice for moderate C-rates.
+
+**Reference:** Marquis, S. G., et al. (2019). *An asymptotic derivation of a single particle model with electrolyte*. Journal of The Electrochemical Society.
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.SPMe()
+print(model.name)  # 'Single Particle Model with electrolyte'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="DFN">
+
+### Doyle-Fuller-Newman Model
+
+The `DFN` is the full porous-electrode model that resolves spatial distributions of electrolyte concentration, electrolyte potential, electrode potential, and particle concentration across the cell sandwich. This is the highest-fidelity standard model in PyBaMM.
+
+**When to use:** High-accuracy single-cell simulations, degradation studies (SEI, lithium plating), or whenever resolving spatial gradients is important (high C-rates, thick electrodes).
+
+**Reference:** Doyle, M., Fuller, T. F., & Newman, J. (1993). *Modeling of galvanostatic charge and discharge of the lithium/polymer/insertion cell*. Journal of The Electrochemical Society.
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+print(model.name)  # 'Doyle-Fuller-Newman model'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="MPM">
+
+### Many-Particle Model
+
+The `MPM` extends the SPM to include a distribution of particle sizes at each macroscale location. This captures heterogeneous utilisation and the effect of polydispersity on cell performance and degradation.
+
+**When to use:** Studies of electrode manufacturing variability, heterogeneous lithiation, or when a single representative particle size is insufficient.
+
+**Reference:** Kirk, T. L., et al. (2020). *Modelling electrode heterogeneity in lithium-ion batteries: unimodal and bimodal particle-size distributions*. SIAM Journal on Applied Mathematics.
+
+<Note>
+The MPM requires a particle size distribution in the parameter values. Use `pybamm.get_size_distribution_parameters` to add distribution parameters to an existing parameter set.
+</Note>
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.MPM()
+print(model.name)  # 'Many-Particle Model'
+
+# MPM default parameters already include size distribution parameters
+param = model.default_parameter_values
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="MSMR">
+
+### Multi-Site Multi-Reaction Model
+
+The `MSMR` is built on top of the DFN and uses a thermodynamic site-occupancy formulation for the open-circuit potential, intercalation kinetics, and particle diffusion. Each electrode is described by a set of reaction sites with individual occupancy fractions, standard potentials, and ideality factors.
+
+**When to use:** When electrode thermodynamics are well-characterised by the MSMR formalism and greater accuracy in OCP shape is needed.
+
+<Warning>
+The `number of MSMR reactions` option is required. You must specify the number of reactions for each electrode as a 2-tuple, e.g. `("6", "4")`.
+</Warning>
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.MSMR(
+    options={"number of MSMR reactions": ("6", "4")}
+)
+print(model.name)  # 'MSMR'
+
+# Default parameter values use the MSMR_Example set
+param = model.default_parameter_values
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="Newman-Tobias">
+
+### Newman-Tobias Model
+
+The `NewmanTobias` model is a DFN-class model that assumes a uniform electrolyte concentration (constant concentration approximation). Unlike the original Newman-Tobias formulation, it uses nonlinear Butler-Volmer kinetics and tracks average solid-phase concentration per electrode. Users may optionally add particle diffusion.
+
+**When to use:** Teaching or benchmarking purposes; situations where you want a DFN-like spatial structure without full electrolyte diffusion.
+
+**References:**
+- Newman, J. S., & Tobias, C. W. (1962). *Theoretical analysis of current distribution in porous electrodes*. Journal of The Electrochemical Society.
+- Chu, H. C., et al. (2020). *A control-oriented electrochemical model for lithium-ion batteries*.
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.NewmanTobias()
+print(model.name)  # 'Newman-Tobias model'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="Yang2017">
+
+### Yang2017
+
+The `Yang2017` model is a DFN variant with pre-configured degradation options that model coupled SEI growth (EC reaction limited) and irreversible lithium plating in the negative electrode, including porosity change from both mechanisms.
+
+**When to use:** Capacity fade and degradation studies that combine SEI growth and lithium plating using the formulation from Yang et al. (2017).
+
+**Reference:** Yang, X.-G., et al. (2017). *Modeling of lithium plating induced aging of lithium-ion batteries: transition from linear to nonlinear aging*. Journal of Power Sources.
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.Yang2017()
+print(model.name)  # 'Yang2017'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+</Tabs>
+
+---
+
+## Key model options
+
+All lithium-ion models accept an `options` dictionary at instantiation. Options not provided take their default values.
+
+<AccordionGroup>
+  <Accordion title="Thermal">
+
+Control how temperature is modelled.
+
+| Option | Values | Default |
+|---|---|---|
+| `"thermal"` | `"isothermal"`, `"lumped"`, `"x-lumped"`, `"x-full"` | `"isothermal"` |
+| `"cell geometry"` | `"arbitrary"`, `"pouch"`, `"cylindrical"` | `"arbitrary"` |
+
+```python
+model = pybamm.lithium_ion.DFN(options={"thermal": "lumped"})
+```
+
+  </Accordion>
+  <Accordion title="Particle submodel">
+
+Control the intra-particle concentration profile.
+
+| Option | Values | Default |
+|---|---|---|
+| `"particle"` | `"Fickian diffusion"`, `"uniform profile"`, `"quadratic profile"`, `"quartic profile"`, `"MSMR"` | `"Fickian diffusion"` |
+
+A 2-tuple selects different models for negative and positive electrodes:
+
+```python
+model = pybamm.lithium_ion.DFN(
+    options={"particle": ("Fickian diffusion", "uniform profile")}
+)
+```
+
+  </Accordion>
+  <Accordion title="SEI growth">
+
+Model SEI layer formation and its effect on capacity fade.
+
+| Option | Values | Default |
+|---|---|---|
+| `"SEI"` | `"none"`, `"constant"`, `"reaction limited"`, `"solvent-diffusion limited"`, `"electron-migration limited"`, `"interstitial-diffusion limited"`, `"ec reaction limited"`, `"VonKolzenberg2020"`, `"tunnelling limited"` | `"none"` |
+| `"SEI film resistance"` | `"none"`, `"distributed"`, `"average"` | `"none"` (if SEI is none) |
+| `"SEI porosity change"` | `"false"`, `"true"` | `"false"` |
+
+```python
+model = pybamm.lithium_ion.DFN(
+    options={
+        "SEI": "ec reaction limited",
+        "SEI film resistance": "distributed",
+        "SEI porosity change": "true",
+    }
+)
+```
+
+  </Accordion>
+  <Accordion title="Lithium plating">
+
+Model metallic lithium deposition on the negative electrode.
+
+| Option | Values | Default |
+|---|---|---|
+| `"lithium plating"` | `"none"`, `"reversible"`, `"partially reversible"`, `"irreversible"` | `"none"` |
+| `"lithium plating porosity change"` | `"false"`, `"true"` | `"false"` |
+
+```python
+model = pybamm.lithium_ion.DFN(
+    options={
+        "lithium plating": "irreversible",
+        "lithium plating porosity change": "true",
+    }
+)
+```
+
+  </Accordion>
+  <Accordion title="Loss of active material">
+
+Capture electrode active material degradation.
+
+| Option | Values | Default |
+|---|---|---|
+| `"loss of active material"` | `"none"`, `"stress-driven"`, `"asymmetric stress-driven"`, `"reaction-driven"`, `"current-driven"`, `"stress and reaction-driven"` | `"none"` |
+| `"particle mechanics"` | `"none"`, `"swelling only"`, `"swelling and cracking"` | `"none"` |
+
+```python
+model = pybamm.lithium_ion.DFN(
+    options={
+        "loss of active material": "stress-driven",
+        "particle mechanics": "swelling and cracking",
+    }
+)
+```
+
+  </Accordion>
+  <Accordion title="Intercalation kinetics">
+
+Select the kinetic expression at the electrode-electrolyte interface.
+
+| Option | Values | Default |
+|---|---|---|
+| `"intercalation kinetics"` | `"symmetric Butler-Volmer"`, `"asymmetric Butler-Volmer"`, `"linear"`, `"Marcus"`, `"Marcus-Hush-Chidsey"`, `"MSMR"` | `"symmetric Butler-Volmer"` |
+
+```python
+model = pybamm.lithium_ion.DFN(
+    options={"intercalation kinetics": "Marcus-Hush-Chidsey"}
+)
+```
+
+  </Accordion>
+</AccordionGroup>
+
+### Example with custom options
+
+```python
+import pybamm
+
+# DFN with lumped thermal model, ec reaction limited SEI, and irreversible plating
+model = pybamm.lithium_ion.DFN(
+    options={
+        "thermal": "lumped",
+        "SEI": "ec reaction limited",
+        "SEI film resistance": "distributed",
+        "SEI porosity change": "true",
+        "lithium plating": "irreversible",
+        "lithium plating porosity change": "true",
+    }
+)
+
+param = pybamm.ParameterValues("Chen2020")
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+<Tip>
+Call `pybamm.print_citations()` after running a simulation to see the full list of references for the models and parameters used.
+</Tip>

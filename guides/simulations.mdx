@@ -1,0 +1,224 @@
+---
+title: Running Simulations
+description: Learn how to create a Simulation, set parameters, configure a solver, solve the model, and access the results.
+---
+
+The `pybamm.Simulation` class is the primary entry point for running PyBaMM simulations. It wraps a model together with parameter values, geometry, mesh, discretisation, and solver into a single object, and provides a simple `solve()` method.
+
+## Creating a simulation
+
+At minimum, a `Simulation` requires a model:
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+sim = pybamm.Simulation(model)
+```
+
+When no arguments are provided, `Simulation` uses the model's defaults for geometry, mesh types, spatial methods, parameter values, and solver.
+
+### Full constructor signature
+
+```python
+sim = pybamm.Simulation(
+    model,
+    experiment=None,          # pybamm.Experiment or string or list of steps
+    geometry=None,            # pybamm.Geometry (defaults to model.default_geometry)
+    parameter_values=None,    # pybamm.ParameterValues
+    submesh_types=None,       # dict of submesh types per subdomain
+    var_pts=None,             # dict of mesh resolution per variable
+    spatial_methods=None,     # dict of spatial discretisation methods
+    solver=None,              # pybamm.BaseSolver
+    output_variables=None,    # list of variables to plot by default
+    C_rate=None,              # convenience: set current as a C-rate
+    discretisation_kwargs=None,
+)
+```
+
+## Passing parameters
+
+Pass a `ParameterValues` object to override the model defaults:
+
+```python
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+param["Current function [A]"] = 5.0
+
+sim = pybamm.Simulation(model, parameter_values=param)
+```
+
+See [Using Parameter Sets](/guides/parameters) for more on working with `ParameterValues`.
+
+## Passing a solver
+
+```python
+model = pybamm.lithium_ion.DFN()
+solver = pybamm.CasadiSolver(mode="safe", rtol=1e-6, atol=1e-6)
+
+sim = pybamm.Simulation(model, solver=solver)
+```
+
+See [Choosing Solvers](/guides/solvers) for a comparison of available solvers.
+
+## Solving
+
+<Steps>
+  <Step title="Without an experiment">
+    When not using a `pybamm.Experiment`, you must provide a time span as `[t0, tf]` in seconds. PyBaMM returns the solution at 100 evenly-spaced points within this interval (or the adaptive solver's natural steps).
+
+    ```python
+    # Solve for 1 hour (3600 seconds)
+    sol = sim.solve([0, 3600])
+    ```
+
+    For a 1C discharge, a safe upper bound is 3700 seconds:
+
+    ```python
+    sol = sim.solve([0, 3700])
+    ```
+
+    You can also pass an array to request the solution at specific times:
+
+    ```python
+    import numpy as np
+    t_eval = np.linspace(0, 3600, 200)
+    sol = sim.solve(t_eval)
+    ```
+  </Step>
+  <Step title="With an experiment">
+    When passing a `pybamm.Experiment`, the solution times are determined by the experiment. Do not pass `t_eval`:
+
+    ```python
+    experiment = pybamm.Experiment([
+        "Discharge at 1C until 3.0V",
+        "Rest for 30 minutes",
+        "Charge at 0.5C until 4.2V",
+        "Hold at 4.2V until 50mA",
+    ])
+    sim = pybamm.Simulation(model, experiment=experiment)
+    sol = sim.solve()
+    ```
+  </Step>
+  <Step title="Setting initial SOC">
+    Pass `initial_soc` to start at a specific state of charge (0 to 1):
+
+    ```python
+    sol = sim.solve([0, 3600], initial_soc=0.8)
+    ```
+  </Step>
+</Steps>
+
+### Convenience: C-rate
+
+Use `C_rate` on the `Simulation` to set the discharge current automatically:
+
+```python
+sim = pybamm.Simulation(model, C_rate=2)  # 2C discharge
+sol = sim.solve([0, 1800])                 # 30 min = half-hour for 2C
+```
+
+### Additional solve options
+
+```python
+sol = sim.solve(
+    [0, 3600],
+    initial_soc=0.9,          # start at 90% SOC
+    calc_esoh=True,           # compute electrode state-of-health summary variables
+    showprogress=True,        # show tqdm progress bar (requires pybamm[tqdm])
+    save_at_cycles=10,        # save every 10th cycle's full solution (experiment mode)
+    inputs={"Ambient temperature [K]": 298.15},  # runtime input parameters
+)
+```
+
+## Accessing the solution
+
+After calling `solve()`, the solution is available as `sim.solution` or as the return value:
+
+```python
+sol = sim.solution  # or the return value of sim.solve()
+
+# Extract a variable as a function of time
+voltage = sol["Battery voltage [V]"]
+print(voltage.entries)   # numpy array of values
+print(voltage.t)         # numpy array of times
+
+# Evaluate at a specific time (in seconds)
+v_at_1000s = sol["Battery voltage [V]"](t=1000)
+
+# Access current
+current = sol["Current [A]"].entries
+```
+
+### Common variables
+
+| Variable | Description |
+|---|---|
+| `"Battery voltage [V]"` | Terminal voltage |
+| `"Current [A]"` | Applied current |
+| `"Cell temperature [K]"` | Average cell temperature |
+| `"Discharge capacity [A.h]"` | Cumulative discharged capacity |
+| `"Negative electrode SOC"` | Stoichiometry in negative electrode |
+| `"Positive electrode SOC"` | Stoichiometry in positive electrode |
+| `"Electrolyte concentration [mol.m-3]"` | Electrolyte Li+ concentration |
+
+### Cycle and step data (experiments)
+
+For experiment simulations, the solution is organised into cycles and steps:
+
+```python
+# Access cycle 1
+cycle_1 = sol.cycles[0]
+
+# Access step 2 of cycle 1
+step_2 = sol.cycles[0].steps[1]
+
+# Voltage during step 2
+v = step_2["Battery voltage [V]"].entries
+
+# Summary variables (capacity fade, etc.)
+print(sol.summary_variables)
+```
+
+## Saving and loading
+
+Simulations can be saved to disk using Python's `pickle` module:
+
+```python
+# Save the simulation (including model and solution)
+sim.save("my_simulation.pkl")
+
+# Load it back
+loaded_sim = pybamm.load_sim("my_simulation.pkl")
+print(loaded_sim.solution["Battery voltage [V]"].entries)
+```
+
+<Note>
+  Saving is not supported when `model.convert_to_format == "python"`. Use `model.convert_to_format = "casadi"` (the default) instead.
+</Note>
+
+### Saving only the model
+
+You can export a discretised model to JSON for later use without re-building:
+
+```python
+sim.solve([0, 3600])
+sim.save_model("model.json", mesh=True, variables=True)
+```
+
+## Building manually
+
+You can separate the build and solve steps:
+
+```python
+# Build the model (set parameters, mesh, discretise)
+sim.build()
+
+# Inspect the built model
+print(sim.built_model)
+
+# Now solve
+sol = sim.solve([0, 3600])
+```
+
+This is useful when you want to inspect or modify the discretised model before solving, or when solving multiple times with different inputs.

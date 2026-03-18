@@ -1,0 +1,273 @@
+---
+title: "Custom Models"
+description: "Build models from scratch using PyBaMM's expression tree, submodel architecture, and serialization API."
+---
+
+PyBaMM's model system is layered: `BaseModel` defines the core equation containers, `BaseBatteryModel` extends it with battery-specific geometry and mesh defaults, and concrete models like `SPM` or `DFN` live at the top. You can plug in at any layer.
+
+## Model hierarchy
+
+```
+pybamm.BaseModel
+    └── pybamm.BaseBatteryModel
+            ├── pybamm.lithium_ion.BaseModel
+            │       ├── pybamm.lithium_ion.SPM
+            │       ├── pybamm.lithium_ion.SPMe
+            │       └── pybamm.lithium_ion.DFN
+            ├── pybamm.lead_acid.BaseModel
+            └── pybamm.equivalent_circuit.BaseModel
+```
+
+`BaseModel.__init__` initialises all equation containers to empty dicts and sets sensible defaults (`use_jacobian=True`, `convert_to_format="casadi"`).
+
+## Core equation containers
+
+Every model instance exposes four primary dictionaries you must populate:
+
+| Attribute | Type | Purpose |
+|---|---|---|
+| `model.rhs` | `dict` | Maps a state variable to its time derivative expression (`dy/dt = f`) |
+| `model.algebraic` | `dict` | Maps a state variable to a residual that must equal zero |
+| `model.initial_conditions` | `dict` | Maps each state variable to its initial value |
+| `model.boundary_conditions` | `dict` | Maps a variable to `{"left": (expr, type), "right": (expr, type)}` |
+| `model.variables` | `dict` | Maps string names to symbolic expressions for post-processing |
+
+All four dicts validate their contents on assignment.
+
+## Building a custom ODE model from scratch
+
+The example below builds a single-state ODE for a lumped thermal model: the cell temperature `T` evolves according to
+$$\frac{dT}{dt} = \frac{Q - h A (T - T_{\text{amb}})}{m c_p}$$
+
+<Steps>
+  <Step title="Define the state variable and parameters">
+    ```python title="custom_ode.py"
+    import pybamm
+
+    model = pybamm.BaseModel(name="Lumped thermal ODE")
+
+    # State variable (no domain = scalar)
+    T = pybamm.Variable("Cell temperature [K]")
+
+    # Parameters
+    Q   = pybamm.Parameter("Heat source [W]")
+    h   = pybamm.Parameter("Heat transfer coefficient [W/m2/K]")
+    A   = pybamm.Parameter("Surface area [m2]")
+    T_a = pybamm.Parameter("Ambient temperature [K]")
+    m   = pybamm.Parameter("Mass [kg]")
+    cp  = pybamm.Parameter("Specific heat capacity [J/kg/K]")
+    ```
+  </Step>
+
+  <Step title="Set the right-hand side">
+    ```python title="custom_ode.py"
+    dTdt = (Q - h * A * (T - T_a)) / (m * cp)
+    model.rhs = {T: dTdt}
+    ```
+  </Step>
+
+  <Step title="Set initial conditions">
+    ```python title="custom_ode.py"
+    model.initial_conditions = {T: T_a}  # start at ambient
+    ```
+  </Step>
+
+  <Step title="Expose variables">
+    ```python title="custom_ode.py"
+    model.variables = {
+        "Cell temperature [K]": T,
+        "Temperature rise [K]": T - T_a,
+    }
+    ```
+  </Step>
+
+  <Step title="Provide parameter values and solve">
+    ```python title="custom_ode.py"
+    param = pybamm.ParameterValues(
+        {
+            "Heat source [W]": 5.0,
+            "Heat transfer coefficient [W/m2/K]": 10.0,
+            "Surface area [m2]": 0.1,
+            "Ambient temperature [K]": 298.15,
+            "Mass [kg]": 0.3,
+            "Specific heat capacity [J/kg/K]": 1000.0,
+        }
+    )
+
+    sim = pybamm.Simulation(model, parameter_values=param)
+    sim.solve([0, 3600])
+    sim.plot(["Cell temperature [K]"])
+    ```
+  </Step>
+</Steps>
+
+## Adding algebraic equations
+
+For DAE systems, use `model.algebraic`. The key must be the variable being solved for, and the value is the residual (set to zero):
+
+```python title="algebraic_constraint.py"
+# Algebraic constraint: phi_s - phi_e - U = 0
+algebraic_var = pybamm.Variable("Overpotential [V]")
+phi_s = pybamm.Variable("Solid potential [V]")
+phi_e = pybamm.Variable("Electrolyte potential [V]")
+U     = pybamm.Parameter("Open-circuit potential [V]")
+
+model.algebraic = {
+    algebraic_var: phi_s - phi_e - U
+}
+model.initial_conditions[algebraic_var] = pybamm.Scalar(0.0)
+```
+
+<Warning>
+Every variable in `model.algebraic` must also appear in `model.initial_conditions`. The initial conditions for algebraic variables are used as the starting guess for the root-finding step.
+</Warning>
+
+## Boundary conditions
+
+Boundary conditions are set per-variable with side (`"left"` / `"right"`) and a type string:
+
+```python title="boundary_conditions.py"
+c = pybamm.Variable("Concentration [mol/m3]", domain="negative electrode")
+N = pybamm.grad(c)  # flux
+
+# No-flux on the left, prescribed flux on the right
+model.boundary_conditions = {
+    c: {
+        "left":  (pybamm.Scalar(0), "Neumann"),
+        "right": (pybamm.Scalar(1e-4), "Neumann"),
+    }
+}
+```
+
+Valid type strings are `"Dirichlet"` (prescribed value) and `"Neumann"` (prescribed flux).
+
+## Submodel architecture
+
+Large battery models are assembled from **submodels** — isolated components that each contribute equations and variables. Each submodel subclasses `pybamm.BaseSubModel`.
+
+### The submodel interface
+
+`BaseSubModel` exposes six methods you override selectively:
+
+| Method | Called with | Purpose |
+|---|---|---|
+| `get_fundamental_variables()` | — | Create variables that depend only on this submodel |
+| `get_coupled_variables(variables)` | full `variables` dict | Create variables that need other submodels' variables |
+| `set_rhs(variables)` | full `variables` dict | Write into `self.rhs` |
+| `set_algebraic(variables)` | full `variables` dict | Write into `self.algebraic` |
+| `set_boundary_conditions(variables)` | full `variables` dict | Write into `self.boundary_conditions` |
+| `set_initial_conditions(variables)` | full `variables` dict | Write into `self.initial_conditions` |
+
+<Note>
+All methods default to `pass`, so you only override the ones relevant to your submodel.
+</Note>
+
+### Writing a submodel
+
+```python title="my_submodel.py"
+import pybamm
+
+
+class SimpleCapacityFade(pybamm.BaseSubModel):
+    """Tracks a single capacity fade state variable."""
+
+    def __init__(self, param, domain=None, options=None):
+        super().__init__(param, domain=domain, name="Capacity fade", options=options)
+
+    def get_fundamental_variables(self):
+        Q_fade = pybamm.Variable("Capacity fade")
+        return {"Capacity fade": Q_fade}
+
+    def set_rhs(self, variables):
+        Q_fade = variables["Capacity fade"]
+        # Simple linear degradation
+        k = pybamm.Parameter("Fade rate [1/s]")
+        self.rhs[Q_fade] = -k * Q_fade
+
+    def set_initial_conditions(self, variables):
+        Q_fade = variables["Capacity fade"]
+        self.initial_conditions[Q_fade] = pybamm.Scalar(1.0)
+```
+
+### Registering submodels in a model
+
+```python title="model_with_submodels.py"
+model = pybamm.lithium_ion.SPM()
+
+# Attach a custom submodel under a unique key
+model.submodels["capacity fade"] = SimpleCapacityFade(
+    param=model.param,
+    options=model.options,
+)
+
+# Rebuild to incorporate the new submodel
+model.build_model()
+```
+
+<Warning>
+`model.build_model()` raises `pybamm.ModelError` if called on a model that has already been built. Use `model.update(new_submodels)` when adding submodels to an already-built model.
+</Warning>
+
+## Building a model
+
+Calling `model.build_model()` runs three internal passes in order:
+
+1. `build_fundamental()` — calls `get_fundamental_variables()` on every submodel
+2. `build_coupled_variables()` — calls `get_coupled_variables(variables)` on every submodel
+3. `build_model_equations()` — calls `set_rhs`, `set_algebraic`, `set_boundary_conditions`, `set_initial_conditions`, and `add_events_from` on every submodel
+
+For models that don't use the submodel pattern (custom `BaseModel` instances), setting the equation dicts directly means there is nothing to build — `Simulation` will build for you implicitly.
+
+## Model serialization
+
+PyBaMM can save a discretised model to a JSON file and reload it without re-discretising.
+
+<CodeGroup>
+  ```python title="Save a discretised model"
+  import pybamm
+
+  model = pybamm.lithium_ion.DFN()
+  param  = pybamm.ParameterValues("Chen2020")
+  sim    = pybamm.Simulation(model, parameter_values=param)
+  sim.solve([0, 3600])
+
+  # Save the discretised model (optionally include the mesh and variables)
+  model.save_model(
+      filename="dfn_model.json",
+      mesh=sim.mesh,
+      variables=sim.built_model.variables,
+  )
+  ```
+
+  ```python title="Load and re-use"
+  import pybamm
+
+  loaded_model = pybamm.load_model("dfn_model.json")
+
+  # The loaded model is already discretised and parameterised
+  solver = pybamm.CasadiSolver()
+  t_eval = [0, 3600]
+  sol    = solver.solve(loaded_model, t_eval)
+  ```
+</CodeGroup>
+
+`model.save_model()` parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `filename` | `str`, optional | Output path. Defaults to `<model_name>_<datetime>.json` |
+| `mesh` | `pybamm.Mesh`, optional | Include mesh data to enable post-processing and plotting |
+| `variables` | `dict`, optional | Processed variable expressions to embed (requires `mesh`) |
+
+<Tip>
+Use `model.to_json()` to get the raw JSON-serialisable `dict` without writing to disk. Use `model.to_config()` for the wrapped config format that includes geometry, spatial methods, and mesh information.
+</Tip>
+
+<Accordion title="convert_to_format options">
+The `model.convert_to_format` attribute controls how the expression tree is compiled before handing to the solver:
+
+- `"casadi"` (default) — converts to a CasADi expression graph; required for `CasadiSolver`
+- `"python"` — converts to Python callable; used with `ScipySolver`
+- `"jax"` — converts to JAX pytree; used with `JaxSolver`
+- `None` — retains the PyBaMM expression tree; useful for debugging
+</Accordion>

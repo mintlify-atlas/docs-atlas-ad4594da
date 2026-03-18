@@ -1,0 +1,136 @@
+---
+title: Callbacks
+description: Callbacks let you hook into the PyBaMM experiment simulation loop to perform logging, monitoring, early stopping, or custom actions at each cycle and step boundary.
+---
+
+<Warning>
+  The callbacks API is **experimental**. The interface may change in future releases.
+</Warning>
+
+Callbacks are called at fixed points during an experiment simulation. Each hook method receives a `logs` dictionary containing current simulation state.
+
+---
+
+## `pybamm.callbacks.Callback`
+
+Base class. Override any of the `on_<event>` methods in your subclass. Each method receives `logs` and should return `None`.
+
+```python
+class Callback:
+    def on_experiment_start(self, logs): ...
+    def on_cycle_start(self, logs): ...
+    def on_step_start(self, logs): ...
+    def on_step_end(self, logs): ...
+    def on_cycle_end(self, logs): ...
+    def on_experiment_end(self, logs): ...
+    def on_experiment_error(self, logs): ...
+    def on_experiment_infeasible_time(self, logs): ...
+    def on_experiment_infeasible_event(self, logs): ...
+```
+
+### Hook methods
+
+| Method | When called | Typical `logs` keys |
+|--------|-------------|---------------------|
+| `on_experiment_start` | Before the first cycle | — |
+| `on_cycle_start` | Before each cycle | `"cycle number"`, `"elapsed time"` |
+| `on_step_start` | Before each step within a cycle | `"cycle number"`, `"step number"`, `"step operating conditions"` |
+| `on_step_end` | After each step | `"stopping conditions"`, `"experiment time"` |
+| `on_cycle_end` | After each cycle | `"stopping conditions"`, `"summary variables"`, `"Minimum voltage [V]"`, `"start capacity"` |
+| `on_experiment_end` | After the final cycle | `"elapsed time"` |
+| `on_experiment_error` | When a `SolverError` occurs | `"error"` |
+| `on_experiment_infeasible_time` | Default duration reached without termination event | `"step duration"`, `"cycle number"`, `"step number"`, `"step operating conditions"` |
+| `on_experiment_infeasible_event` | Termination event triggered before experiment completes | `"termination"`, `"cycle number"`, `"step number"`, `"step operating conditions"` |
+
+---
+
+## `pybamm.callbacks.CallbackList`
+
+A container that holds multiple `Callback` objects and calls each one in sequence. Construct it with a list of callbacks:
+
+```python
+callbacks = pybamm.callbacks.CallbackList([
+    pybamm.callbacks.LoggingCallback(),
+    my_custom_callback,
+])
+```
+
+Methods on `CallbackList` mirror those of `Callback` and automatically dispatch to every registered callback.
+
+---
+
+## `pybamm.callbacks.LoggingCallback`
+
+The default callback. Writes progress information to PyBaMM's logger (or an optional log file).
+
+```python
+pybamm.callbacks.LoggingCallback(logfile=None)
+```
+
+<ParamField path="logfile" type="str | None" default="None">
+  Path to a log file. If `None`, output is sent to `pybamm.logger` (stdout by default).
+</ParamField>
+
+A `LoggingCallback` is automatically added to every simulation that does not already have one.
+
+---
+
+## Custom Callback Example
+
+```python
+import pybamm
+
+class StopOnCapacityFade(pybamm.callbacks.Callback):
+    """
+    Raise an error if capacity drops below a threshold.
+    """
+    def __init__(self, capacity_threshold):
+        self.capacity_threshold = capacity_threshold
+
+    def on_cycle_end(self, logs):
+        cap = logs["summary variables"]["Capacity [A.h]"]
+        if cap < self.capacity_threshold:
+            raise pybamm.SolverError(
+                f"Capacity {cap:.3f} Ah fell below threshold "
+                f"{self.capacity_threshold:.3f} Ah"
+            )
+
+
+experiment = pybamm.Experiment(
+    ["Discharge at 1C until 2.5 V", "Charge at 1C until 4.2 V"] * 100
+)
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.SPM(),
+    experiment=experiment,
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+)
+
+sim.solve(
+    callbacks=StopOnCapacityFade(capacity_threshold=4.5)
+)
+```
+
+---
+
+## Using Multiple Callbacks
+
+```python
+import pybamm
+
+class SaveProgress(pybamm.callbacks.Callback):
+    def __init__(self):
+        self.cycles = []
+
+    def on_cycle_end(self, logs):
+        cap = logs["summary variables"]["Capacity [A.h]"]
+        self.cycles.append(cap)
+
+
+save_cb = SaveProgress()
+log_cb = pybamm.callbacks.LoggingCallback(logfile="run.log")
+
+sim.solve(callbacks=[save_cb, log_cb])
+
+print(save_cb.cycles)  # list of capacity at each cycle end
+```

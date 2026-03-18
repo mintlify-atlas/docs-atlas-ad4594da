@@ -1,0 +1,273 @@
+---
+title: Working with Battery Models
+description: Learn how battery models are structured in PyBaMM, how to instantiate them, and how to configure model options for lithium-ion and other chemistries.
+---
+
+PyBaMM models describe the electrochemical and thermal physics of a battery cell. Every model is built from a set of **submodels** — modular components that each represent a piece of the physics, such as particle diffusion, electrolyte transport, or SEI growth.
+
+## Model architecture
+
+All battery models inherit from `pybamm.BaseBatteryModel`, which provides:
+
+- A `submodels` dictionary mapping submodel names to submodel objects
+- Default geometry, mesh, discretisation, and solver settings
+- A `build()` method that assembles the submodels into a system of equations
+- An `options` dictionary that controls which submodels are active
+
+The `Simulation` class handles setting parameters, meshing, discretisation, and solving — so in most workflows you create a model and pass it directly to `pybamm.Simulation`.
+
+## Available lithium-ion models
+
+<Tabs>
+  <Tab title="SPM">
+    **Single Particle Model (SPM)**
+
+    The simplest electrochemical model. Each electrode is represented as a single spherical particle. The electrolyte concentration is assumed uniform (constant). Fast to solve, suitable for low C-rates.
+
+    ```python
+    model = pybamm.lithium_ion.SPM()
+    ```
+
+    Reference: Marquis et al. (2019)
+  </Tab>
+  <Tab title="SPMe">
+    **Single Particle Model with Electrolyte (SPMe)**
+
+    Extends the SPM by adding a leading-order correction for electrolyte concentration gradients. More accurate than SPM at moderate C-rates without the full computational cost of DFN.
+
+    ```python
+    model = pybamm.lithium_ion.SPMe()
+    ```
+  </Tab>
+  <Tab title="DFN">
+    **Doyle-Fuller-Newman (DFN) Model**
+
+    The full porous-electrode model. Resolves concentration and potential distributions across the electrode thickness and within particles. The most accurate and most expensive model.
+
+    ```python
+    model = pybamm.lithium_ion.DFN()
+    ```
+
+    Reference: Doyle, Fuller & Newman (1993); Marquis et al. (2019)
+  </Tab>
+  <Tab title="MPM">
+    **Many-Particle Model (MPM)**
+
+    An extension of the SPM that accounts for a distribution of particle sizes within each electrode. Useful for modelling heterogeneous electrodes.
+
+    ```python
+    model = pybamm.lithium_ion.MPM()
+    ```
+  </Tab>
+  <Tab title="MSMR">
+    **Multi-Site Multi-Reaction (MSMR) Model**
+
+    Uses a thermodynamic multi-site intercalation framework for the open-circuit potential and particle diffusion. Compatible with MSMR parameter sets.
+
+    ```python
+    model = pybamm.lithium_ion.MSMR(options={"number of MSMR reactions": ("6", "4")})
+    ```
+  </Tab>
+  <Tab title="Newman-Tobias">
+    **Newman-Tobias Model**
+
+    An intermediate model between SPM and DFN, derived via asymptotic reduction.
+
+    ```python
+    model = pybamm.lithium_ion.NewmanTobias()
+    ```
+  </Tab>
+</Tabs>
+
+### Other chemistries
+
+<CardGroup cols={2}>
+  <Card title="Lead-acid" icon="battery-half">
+    `pybamm.lead_acid.Full()` — full porous-electrode lead-acid model
+
+    `pybamm.lead_acid.LOQS()` — leading-order quasi-static model
+  </Card>
+  <Card title="Equivalent circuit" icon="microchip">
+    `pybamm.equivalent_circuit.Thevenin()` — RC equivalent circuit model
+  </Card>
+</CardGroup>
+
+## Instantiating models
+
+```python title="Basic instantiation"
+import pybamm
+
+# Default options
+model = pybamm.lithium_ion.DFN()
+
+# Custom name
+model = pybamm.lithium_ion.SPM(name="My SPM")
+
+# With options
+model = pybamm.lithium_ion.DFN(options={"thermal": "lumped"})
+```
+
+The `options` dict is optional — every option has a default. You only need to supply the keys you want to change.
+
+## Model options
+
+Options control which submodels are active and how physics is represented. The full set is documented in `BatteryModelOptions`. Key options are listed below.
+
+<Accordion title="Thermal models">
+  Controls how heat generation and transfer are modelled.
+
+  | Value | Description |
+  |---|---|
+  | `"isothermal"` (default) | No thermal effects |
+  | `"lumped"` | Single lumped temperature ODE |
+  | `"x-lumped"` | Lumped in through-cell direction, resolved in transverse |
+  | `"x-full"` | Full thermal model (requires `cell geometry: "pouch"`) |
+
+  ```python
+  model = pybamm.lithium_ion.DFN(options={"thermal": "lumped"})
+  ```
+</Accordion>
+
+<Accordion title="Particle diffusion">
+  Sets the submodel used to describe lithium diffusion inside electrode particles.
+
+  | Value | Description |
+  |---|---|
+  | `"Fickian diffusion"` (default) | Full spherical diffusion |
+  | `"uniform profile"` | Uniform concentration within particle |
+  | `"quadratic profile"` | Second-order polynomial approximation |
+  | `"quartic profile"` | Fourth-order polynomial approximation |
+  | `"MSMR"` | Multi-site multi-reaction diffusion |
+
+  A 2-tuple sets different options per electrode:
+
+  ```python
+  model = pybamm.lithium_ion.DFN(
+      options={"particle": ("Fickian diffusion", "uniform profile")}
+  )
+  ```
+</Accordion>
+
+<Accordion title="SEI growth">
+  Models the growth of the Solid Electrolyte Interface on the negative electrode.
+
+  | Value | Description |
+  |---|---|
+  | `"none"` (default) | No SEI growth |
+  | `"constant"` | Fixed SEI thickness |
+  | `"reaction limited"` | SEI growth limited by electrochemical reaction |
+  | `"solvent-diffusion limited"` | Growth limited by solvent diffusion |
+  | `"electron-migration limited"` | Growth limited by electron migration |
+  | `"ec reaction limited"` | Ethylene carbonate reduction |
+  | `"VonKolzenberg2020"` | Multi-mechanism model |
+
+  ```python
+  model = pybamm.lithium_ion.SPM(options={"SEI": "reaction limited"})
+  ```
+</Accordion>
+
+<Accordion title="Lithium plating">
+  Models lithium metal deposition on the negative electrode.
+
+  | Value | Description |
+  |---|---|
+  | `"none"` (default) | No plating |
+  | `"reversible"` | Reversible plating |
+  | `"partially reversible"` | Partial reversibility |
+  | `"irreversible"` | Irreversible plating |
+
+  ```python
+  model = pybamm.lithium_ion.DFN(options={"lithium plating": "irreversible"})
+  ```
+</Accordion>
+
+<Accordion title="Loss of active material (LAM)">
+  Models degradation of active material over cycling.
+
+  | Value | Description |
+  |---|---|
+  | `"none"` (default) | No LAM |
+  | `"stress-driven"` | Driven by mechanical stress |
+  | `"reaction-driven"` | Driven by side reactions |
+  | `"current-driven"` | Driven by current |
+  | `"stress and reaction-driven"` | Combined |
+
+  ```python
+  model = pybamm.lithium_ion.DFN(
+      options={"loss of active material": "stress-driven"}
+  )
+  ```
+</Accordion>
+
+<Accordion title="Intercalation kinetics">
+  Sets the electrochemical kinetics model at the electrode-electrolyte interface.
+
+  | Value | Description |
+  |---|---|
+  | `"symmetric Butler-Volmer"` (default) | Standard Butler-Volmer |
+  | `"asymmetric Butler-Volmer"` | Asymmetric transfer coefficient |
+  | `"linear"` | Linearised kinetics |
+  | `"Marcus"` | Marcus theory |
+  | `"Marcus-Hush-Chidsey"` | Asymptotic MHC |
+  | `"MSMR"` | Multi-site kinetics |
+</Accordion>
+
+<Accordion title="Particle mechanics">
+  Models mechanical stresses and cracking in electrode particles.
+
+  | Value | Description |
+  |---|---|
+  | `"none"` (default) | No mechanics |
+  | `"swelling only"` | Particle swelling without cracking |
+  | `"swelling and cracking"` | Full mechanics with cracking |
+</Accordion>
+
+## Combining options
+
+Multiple options can be combined in a single dict:
+
+```python title="DFN with degradation"
+model = pybamm.lithium_ion.DFN(
+    options={
+        "thermal": "lumped",
+        "SEI": "reaction limited",
+        "lithium plating": "irreversible",
+        "loss of active material": "stress-driven",
+        "particle mechanics": "swelling and cracking",
+    }
+)
+```
+
+<Warning>
+  Not all combinations of options are valid. PyBaMM will raise an `OptionError` if incompatible options are combined — for example, specifying `"MSMR"` for the `"particle"` option without also setting `"open-circuit potential": "MSMR"`.
+</Warning>
+
+## Basic models for teaching
+
+PyBaMM includes simplified implementations that expose the full equation derivation, suitable for learning and custom extensions:
+
+```python
+# Basic DFN with explicit equations (no submodel abstraction)
+model = pybamm.lithium_ion.BasicDFN()
+
+# Basic SPM
+model = pybamm.lithium_ion.BasicSPM()
+
+# DFN for a half-cell
+model = pybamm.lithium_ion.BasicDFNHalfCell()
+```
+
+## Checking what's in a model
+
+```python
+model = pybamm.lithium_ion.DFN()
+
+# List all submodels
+print(list(model.submodels.keys()))
+
+# Check model options
+print(model.options)
+
+# List all output variables
+print(list(model.variables.keys())[:10])
+```

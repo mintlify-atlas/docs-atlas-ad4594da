@@ -1,0 +1,97 @@
+---
+title: ScipySolver
+description: The ScipySolver wraps scipy.integrate.solve_ivp to solve ODE-only battery models. It is the simplest solver and requires no additional compiled dependencies.
+---
+
+`pybamm.ScipySolver` wraps [`scipy.integrate.solve_ivp`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) and is the easiest way to get started when your model produces a pure ODE system.
+
+<Warning>
+  `ScipySolver` does **not** support DAE (differential-algebraic) models. Most lithium-ion models (SPM, SPMe, DFN) include algebraic equations and require `CasadiSolver` or `IDAKLUSolver`.
+</Warning>
+
+## Constructor
+
+```python
+pybamm.ScipySolver(
+    method="BDF",
+    rtol=1e-6,
+    atol=1e-6,
+    extrap_tol=None,
+    on_extrapolation=None,
+    extra_options=None,
+)
+```
+
+<ParamField path="method" type="str" default="&quot;BDF&quot;">
+  Integration method passed to `solve_ivp`. Supported values:
+
+  | Method | Description |
+  |--------|-------------|
+  | `"BDF"` | Implicit BDF (default); good for stiff problems |
+  | `"RK45"` | Explicit Runge-Kutta 4(5); non-stiff problems |
+  | `"RK23"` | Explicit Runge-Kutta 2(3) |
+  | `"DOP853"` | Explicit Runge-Kutta of order 8 |
+  | `"Radau"` | Implicit Runge-Kutta (Radau IIA); stiff |
+  | `"LSODA"` | Automatic stiff/non-stiff switching |
+</ParamField>
+
+<ParamField path="rtol" type="float" default="1e-6">
+  Relative tolerance.
+</ParamField>
+
+<ParamField path="atol" type="float" default="1e-6">
+  Absolute tolerance.
+</ParamField>
+
+<ParamField path="extrap_tol" type="float | None" default="0">
+  Tolerance for detecting extrapolation beyond the solved interval.
+</ParamField>
+
+<ParamField path="on_extrapolation" type="str" default="&quot;warn&quot;">
+  Behaviour on extrapolation: `"warn"`, `"error"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="extra_options" type="dict | None" default="{}">
+  Additional keyword arguments forwarded to `solve_ivp` (e.g. `{"max_step": 10}`).
+</ParamField>
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```python Basic ODE solve
+import pybamm
+
+# SPM with "reformulated" option produces a pure ODE
+model = pybamm.lithium_ion.SPM()
+
+param = pybamm.ParameterValues("Chen2020")
+solver = pybamm.ScipySolver(method="BDF")
+
+sim = pybamm.Simulation(model, parameter_values=param, solver=solver)
+sol = sim.solve([0, 3600])
+print(sol["Terminal voltage [V]"].entries[-1])
+```
+
+```python Non-stiff with RK45
+import pybamm
+
+solver = pybamm.ScipySolver(method="RK45", rtol=1e-8, atol=1e-8)
+```
+
+```python Pass extra solve_ivp options
+import pybamm
+
+solver = pybamm.ScipySolver(
+    method="BDF",
+    extra_options={"max_step": 1.0, "dense_output": True},
+)
+```
+
+</CodeGroup>
+
+<Note>
+  Sensitivity analysis is not supported by `ScipySolver`. Use `IDAKLUSolver` if you need parameter sensitivities.
+</Note>

@@ -1,0 +1,156 @@
+---
+title: "Equivalent Circuit Models API"
+description: "Thevenin and other equivalent circuit models available in pybamm.equivalent_circuit."
+---
+
+The `pybamm.equivalent_circuit` module provides data-driven equivalent circuit models (ECMs). These are faster than physics-based models and are commonly used in BMS applications.
+
+## Available models
+
+| Class | Description |
+|---|---|
+| `Thevenin` | Classical Thevenin ECM with OCV, resistance, and RC elements |
+
+---
+
+## `pybamm.equivalent_circuit.Thevenin`
+
+The Thevenin ECM consists of:
+- An **OCV element** — open-circuit voltage as a function of SoC.
+- A **series resistor** — R0 (Element-0).
+- One or more **RC elements** — each with a resistance and capacitance in parallel.
+- An optional **diffusion element**.
+- A **lumped thermal model** for cell and jig temperatures.
+
+```python
+pybamm.equivalent_circuit.Thevenin(
+    name="Thevenin Equivalent Circuit Model",
+    options=None,
+    build=True,
+)
+```
+
+<ParamField path="name" type="str" default="Thevenin Equivalent Circuit Model">
+  Human-readable model name.
+</ParamField>
+
+<ParamField path="options" type="dict">
+  Model options. See [Options reference](#options-reference) below.
+</ParamField>
+
+<ParamField path="build" type="bool" default="true">
+  Build the model on instantiation. Pass `False` to modify sub-models first.
+</ParamField>
+
+**Default parameter set:** `pybamm.ParameterValues("ECM_Example")`
+
+## Options reference
+
+<ResponseField name="number of rc elements" type="str | int" default="1">
+  Number of RC elements to add to the model. Must be a positive integer (passed as a string or int, e.g. `"2"` or `2`).
+</ResponseField>
+
+<ResponseField name="diffusion element" type="str" default="false">
+  Whether to include a diffusion (Warburg) element. `"false"` or `"true"`.
+</ResponseField>
+
+<ResponseField name="operating mode" type="str" default="current">
+  How the applied current is determined. Options:
+  - `"current"` — current is supplied directly
+  - `"voltage"` — algebraic solve for current at fixed voltage
+  - `"power"` — algebraic solve for current at fixed power
+  - `"differential power"` — ODE for power
+  - `"resistance"` — algebraic solve for current at fixed resistance
+  - `"differential resistance"` — ODE for resistance
+  - `"CCCV"` — constant-current constant-voltage via ODE for current
+  - callable — user-defined algebraic residual
+</ResponseField>
+
+<ResponseField name="calculate discharge energy" type="str" default="false">
+  Whether to calculate discharge energy, throughput energy, and throughput capacity. `"false"` or `"true"`.
+</ResponseField>
+
+## Default quick-plot variables
+
+When `sim.plot()` is called without arguments, the Thevenin model plots:
+
+- `"Current [A]"`
+- `"Voltage [V]"` and `"Open-circuit voltage [V]"`
+- `"SoC"`
+- `"Power [W]"`
+- Cell, jig, and ambient temperatures
+- Total, reversible, and irreversible heat generation
+
+## Examples
+
+<CodeGroup>
+
+```python Basic Thevenin discharge
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin()
+param = pybamm.ParameterValues("ECM_Example")
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+
+sol = sim.solution
+print(sol["Voltage [V]"].entries)
+print(sol["SoC"].entries)
+```
+
+```python Two RC elements
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"number of rc elements": 2}
+)
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+```
+
+```python With diffusion element
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin(
+    options={
+        "number of rc elements": 1,
+        "diffusion element": "true",
+    }
+)
+```
+
+```python Experiment with Thevenin model
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin()
+experiment = pybamm.Experiment(
+    [
+        (
+            "Discharge at C/5 for 5 hours or until 2.5 V",
+            "Rest for 30 minutes",
+            "Charge at C/5 until 4.2 V",
+            "Hold at 4.2 V until C/50",
+        )
+    ] * 3
+)
+
+sim = pybamm.Simulation(model, experiment=experiment)
+sim.solve()
+sim.plot()
+```
+
+```python CCCV operating mode
+import pybamm
+
+model = pybamm.equivalent_circuit.Thevenin(
+    options={"operating mode": "CCCV"}
+)
+```
+
+</CodeGroup>
+
+<Note>
+  The Thevenin model requires OCV, resistance, and RC parameter functions to be defined as functions of SoC in `ParameterValues`. The built-in `"ECM_Example"` set provides these for testing.
+</Note>

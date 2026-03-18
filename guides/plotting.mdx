@@ -1,0 +1,250 @@
+---
+title: Plotting Results
+description: Learn how to visualise PyBaMM simulation results using sim.plot(), QuickPlot, plot_voltage_components, plot_summary_variables, and plot2D.
+---
+
+PyBaMM provides several plotting utilities built on Matplotlib. Matplotlib is an optional dependency — it is imported lazily inside plot methods so that PyBaMM can run on headless systems without a display.
+
+<Note>
+  Install Matplotlib with: `pip install pybamm[plot]`
+</Note>
+
+## Quick plotting with `sim.plot()`
+
+After solving, call `sim.plot()` to open an interactive slider plot of the default output variables:
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+
+sim.plot()
+```
+
+This creates a `pybamm.QuickPlot` and calls `dynamic_plot()`, which renders a matplotlib figure with a time slider.
+
+### Choosing variables to plot
+
+```python
+sim.plot([
+    "Battery voltage [V]",
+    "Current [A]",
+    "Cell temperature [K]",
+    "Negative particle surface concentration [mol.m-3]",
+])
+```
+
+## QuickPlot
+
+`pybamm.QuickPlot` gives you full control over the plot configuration. It accepts solutions or simulation objects.
+
+```python
+fig, axes = pybamm.QuickPlot(
+    sim,
+    output_variables=[
+        "Battery voltage [V]",
+        "Electrolyte concentration [mol.m-3]",
+        "Negative particle surface concentration [mol.m-3]",
+        "Positive particle surface concentration [mol.m-3]",
+    ],
+    labels=["SPM"],
+    time_unit="hours",
+    spatial_unit="um",
+    figsize=(12, 8),
+    n_rows=2,
+)
+```
+
+### Constructor options
+
+| Parameter | Description | Default |
+|---|---|---|
+| `solutions` | Solution(s) or Simulation(s) to plot | required |
+| `output_variables` | List of variable names | model defaults |
+| `labels` | Legend labels for each solution | model names |
+| `colors` | Color cycle | `["r", "b", "k", "g", "m", "c"]` |
+| `linestyles` | Linestyle cycle | `["-", ":", "--", "-."]` |
+| `figsize` | Figure size `(width, height)` | auto |
+| `n_rows` | Number of subplot rows | auto (square layout) |
+| `time_unit` | `"hours"`, `"minutes"`, or `"seconds"` | auto |
+| `spatial_unit` | `"m"`, `"mm"`, or `"um"` | `"um"` |
+| `variable_limits` | Axis limits: `"fixed"`, `"tight"`, or a dict | `"fixed"` |
+
+### Comparing multiple solutions
+
+Pass a list of solutions or simulations to overlay them:
+
+```python
+model_spm = pybamm.lithium_ion.SPM()
+model_dfn = pybamm.lithium_ion.DFN()
+param = pybamm.ParameterValues("Chen2020")
+
+sim_spm = pybamm.Simulation(model_spm, parameter_values=param)
+sim_dfn = pybamm.Simulation(model_dfn, parameter_values=param)
+
+sim_spm.solve([0, 3600])
+sim_dfn.solve([0, 3600])
+
+pybamm.dynamic_plot(
+    [sim_spm, sim_dfn],
+    output_variables=["Battery voltage [V]", "Current [A]"],
+    labels=["SPM", "DFN"],
+)
+```
+
+### Dynamic (interactive) plot
+
+Call `dynamic_plot()` directly for the interactive slider:
+
+```python
+quick_plot = pybamm.QuickPlot(sim)
+quick_plot.dynamic_plot()
+```
+
+Or use the module-level shortcut:
+
+```python
+pybamm.dynamic_plot(sim)
+```
+
+### Static plot at a fixed time
+
+Use `plot(t)` to render the figure at a single time point (in the solution's time unit):
+
+```python
+quick_plot = pybamm.QuickPlot(sim)
+quick_plot.plot(t=1800)  # plot at t = 1800 s
+```
+
+## Voltage components
+
+`pybamm.plot_voltage_components` breaks down the terminal voltage into its contributing overpotentials:
+
+```python
+pybamm.plot_voltage_components(sim)
+```
+
+You can also pass a `Solution` object:
+
+```python
+pybamm.plot_voltage_components(sim.solution)
+```
+
+Options:
+
+```python
+pybamm.plot_voltage_components(
+    sim,
+    show_legend=True,
+    split_by_electrode=True,         # separate negative and positive contributions
+    electrode_phases=("primary", "primary"),
+)
+```
+
+This is accessible from the `Simulation` object too:
+
+```python
+sim.plot_voltage_components()
+```
+
+## Summary variables
+
+For multi-cycle experiments, `pybamm.plot_summary_variables` plots cycle-level degradation metrics:
+
+```python
+# After a long cycling experiment
+pybamm.plot_summary_variables(sol)
+```
+
+Default variables plotted:
+- `Capacity [A.h]`
+- `Loss of lithium inventory [%]`
+- `Total capacity lost to side reactions [A.h]`
+- `Loss of active material in negative electrode [%]`
+- `Loss of active material in positive electrode [%]`
+- Stoichiometric limits `x_100`, `x_0`, `y_100`, `y_0`
+
+Custom variables:
+
+```python
+pybamm.plot_summary_variables(
+    sol,
+    output_variables=["Capacity [A.h]", "Loss of lithium inventory [%]"],
+    labels=["Simulation 1"],
+)
+```
+
+Compare multiple cycling simulations:
+
+```python
+pybamm.plot_summary_variables([sol1, sol2], labels=["Cell A", "Cell B"])
+```
+
+## 2D plots
+
+For spatially-resolved models (dimensionality > 0), use `pybamm.plot2D` to visualise a variable as a function of two spatial coordinates:
+
+```python
+# Evaluate variable at a given time
+t_plot = 1800  # seconds
+
+x = sol["x [m]"](t=t_plot)
+y = sol["y [m]"](t=t_plot)
+z = sol["Electrolyte concentration [mol.m-3]"](t=t_plot)
+
+pybamm.plot2D(x, y, z)
+```
+
+The `x`, `y`, and `z` arguments must be `pybamm.Array` objects. `plot2D` calls `matplotlib.pyplot.contourf` under the hood.
+
+```python
+pybamm.plot2D(
+    x, y, z,
+    ax=my_axis,       # optional: plot on an existing axis
+    show_plot=False,  # suppress plt.show() call
+)
+```
+
+## Creating a GIF
+
+Generate an animated GIF of the solution evolving over time:
+
+```python
+sim.create_gif(
+    number_of_images=80,
+    duration=0.1,               # seconds per frame
+    output_filename="discharge.gif",
+)
+```
+
+Or via the `QuickPlot` object:
+
+```python
+qp = pybamm.QuickPlot(sim)
+qp.create_gif(number_of_images=60, duration=0.15, output_filename="animation.gif")
+```
+
+## Working with Matplotlib directly
+
+You can access the underlying Matplotlib figure and axes from a `QuickPlot`:
+
+```python
+import matplotlib.pyplot as plt
+
+qp = pybamm.QuickPlot(sim, output_variables=["Battery voltage [V]"])
+qp.plot(t=0)  # render once
+
+fig = qp.fig
+ax = qp.axes[0][0]
+
+ax.set_title("DFN Discharge")
+ax.set_xlabel("Time (s)")
+fig.savefig("voltage.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+<Tip>
+  Set `show_plot=False` in `plot_voltage_components`, `plot_summary_variables`, or `plot2D` when you want to combine multiple figures before calling `plt.show()` once at the end.
+</Tip>

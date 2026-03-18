@@ -1,0 +1,245 @@
+---
+title: Defining Experiments
+description: Learn how to define multi-step battery test protocols using pybamm.Experiment, including charge, discharge, rest, and hold steps with cycling.
+---
+
+`pybamm.Experiment` lets you define realistic battery test protocols as a sequence of operating steps. Each step can specify the operating mode (current, voltage, power, resistance), magnitude, duration, and termination conditions.
+
+## Creating an experiment
+
+Pass a list of strings (or step objects) to `pybamm.Experiment`:
+
+```python
+import pybamm
+
+experiment = pybamm.Experiment([
+    "Discharge at 1C for 1 hour or until 3.0V",
+    "Rest for 30 minutes",
+    "Charge at 0.5C until 4.2V",
+    "Hold at 4.2V until 50mA",
+])
+```
+
+Then pass the experiment to `pybamm.Simulation`:
+
+```python
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model, experiment=experiment)
+sol = sim.solve()
+```
+
+## Step string syntax
+
+Each step string follows a human-readable format. The parser is flexible about spacing and capitalisation.
+
+### Discharge / Charge
+
+```
+Discharge at <value><unit> [for <duration>] [or until <condition>]
+Charge at <value><unit>    [for <duration>] [or until <condition>]
+```
+
+**Current units:** `A`, `mA`, `C` (C-rate), `C/2`, `2C`, etc.
+
+```python
+"Discharge at 1C for 1 hour"
+"Discharge at 1C for 3600 seconds or until 2.5V"
+"Charge at 0.5C until 4.2V"
+"Charge at 2A for 30 minutes"
+"Discharge at C/5 for 10 hours or until 3.3V"
+```
+
+### Rest
+
+```
+Rest for <duration>
+```
+
+```python
+"Rest for 10 minutes"
+"Rest for 1 hour"
+"Rest for 3600 seconds"
+```
+
+### Hold (constant voltage)
+
+```
+Hold at <voltage>V until <current>
+```
+
+```python
+"Hold at 4.2V until 50mA"
+"Hold at 4.2V until C/20"
+```
+
+### Termination conditions in steps
+
+Step-level terminations stop the current step and move to the next one:
+
+| Condition | Example |
+|---|---|
+| Voltage cut-off | `until 3.0V` or `until 4.2V` |
+| Current cut-off | `until 50mA` or `until C/20` |
+| Duration limit | `for 1 hour` |
+| Combined | `for 1 hour or until 3.0V` |
+
+## Cycling
+
+Group steps into cycles by wrapping them in a tuple, then multiply by the number of cycles:
+
+```python
+experiment = pybamm.Experiment(
+    [
+        (
+            "Discharge at 1C until 3.0V",
+            "Rest for 5 minutes",
+            "Charge at 1C until 4.2V",
+            "Hold at 4.2V until 50mA",
+        )
+    ]
+    * 100  # repeat 100 times
+)
+```
+
+<Note>
+  When steps are grouped in a tuple, an infeasible step (e.g. the voltage is already below the cut-off) causes that cycle to stop early rather than raising an error. Use tuples for proper cycle grouping.
+</Note>
+
+## Global experiment options
+
+The `Experiment` constructor accepts optional global settings:
+
+```python
+experiment = pybamm.Experiment(
+    [
+        "Discharge at 1C until 3.0V",
+        "Charge at 0.5C until 4.2V",
+    ],
+    period="1 minute",         # output recording frequency (default: 1 minute)
+    temperature="25 oC",       # experiment temperature (overrides parameter set)
+    termination="80% capacity",  # stop experiment when capacity drops to 80%
+)
+```
+
+### Experiment-level termination
+
+This is different from step-level termination — it stops the entire multi-cycle experiment:
+
+```python
+# Stop when capacity drops below 80%
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0V", "Charge at 1C until 4.2V")] * 500,
+    termination="80% capacity",
+)
+
+# Stop at an absolute capacity
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0V", "Charge at 1C until 4.2V")] * 500,
+    termination="4 Ah capacity",
+)
+
+# Stop at a voltage threshold
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0V", "Charge at 1C until 4.2V")] * 500,
+    termination=["80% capacity", "2.5 V"],
+)
+```
+
+## Using step objects
+
+For programmatic construction, use the `pybamm.step` functions instead of strings:
+
+```python
+# Equivalent to "Discharge at 1C for 1 hour or until 3.0V"
+step = pybamm.step.c_rate(1, duration="1 hour", termination="3.0V", direction="Discharge")
+
+# Constant current
+step = pybamm.step.current(2.0, duration=3600, termination="2.5V")
+
+# Constant voltage
+step = pybamm.step.voltage(4.2, termination="50mA")
+
+# Constant power
+step = pybamm.step.power(5.0, duration="30 minutes")
+
+# Constant resistance
+step = pybamm.step.resistance(0.05, duration="1 hour")
+
+# Rest
+step = pybamm.step.rest(duration="10 minutes")
+```
+
+Pass steps directly to `Experiment`:
+
+```python
+experiment = pybamm.Experiment([
+    pybamm.step.c_rate(1, termination="3.0V"),
+    pybamm.step.rest(duration="5 minutes"),
+    pybamm.step.c_rate(0.5, direction="Charge", termination="4.2V"),
+])
+```
+
+## Accessing results by cycle and step
+
+After solving, the solution is structured by cycle and step:
+
+```python
+sol = sim.solve()
+
+# Number of completed cycles
+print(len(sol.cycles))
+
+# Voltage in cycle 3, step 1 (0-indexed)
+v = sol.cycles[2].steps[0]["Battery voltage [V]"].entries
+
+# Time array for a specific step
+t = sol.cycles[2].steps[0].t
+```
+
+### Summary variables
+
+Summary variables aggregate key metrics per cycle (capacity, SOH indicators, etc.):
+
+```python
+import pybamm
+
+# After a long cycle experiment
+sol = sim.solve()
+
+# Dictionary of summary variables for all cycles
+print(sol.summary_variables.keys())
+
+# Capacity fade over cycles
+capacity = sol.summary_variables["Capacity [A.h]"]
+
+# Plot summary variables
+pybamm.plot_summary_variables(sol)
+```
+
+## Complete example
+
+```python title="CCCV charge + discharge cycling"
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+
+experiment = pybamm.Experiment(
+    [
+        (
+            "Discharge at 1C until 3.0V",
+            "Rest for 5 minutes",
+            "Charge at 0.3C until 4.2V",
+            "Hold at 4.2V until C/20",
+            "Rest for 5 minutes",
+        )
+    ]
+    * 50,
+    termination="80% capacity",
+)
+
+sim = pybamm.Simulation(model, parameter_values=param, experiment=experiment)
+sol = sim.solve(showprogress=True)
+
+pybamm.plot_summary_variables(sol)
+```

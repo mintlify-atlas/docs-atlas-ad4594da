@@ -1,0 +1,103 @@
+---
+title: Solvers Overview
+description: PyBaMM provides several solver backends suited to different model types and performance requirements. This page compares the available solvers and explains how to choose the right one.
+---
+
+## Solver Comparison
+
+| Solver | Backend | ODE | DAE | Sensitivity | Notes |
+|---|---|---|---|---|---|
+| `CasadiSolver` | CasADi / SUNDIALS | Yes | Yes | Yes | General-purpose; safe mode handles events |
+| `IDAKLUSolver` | SUNDIALS IDA + KLU | Yes | Yes | Yes | Fastest for most problems; recommended default |
+| `ScipySolver` | SciPy `solve_ivp` | Yes | No | No | Simple; no DAE support |
+| `JaxSolver` | JAX | Yes | BDF only | No | GPU/TPU capable; requires Python ≥ 3.11 |
+
+---
+
+## Choosing a Solver
+
+- **Most lithium-ion models (SPM, SPMe, DFN)** include algebraic equations (DAEs). Use `IDAKLUSolver` (default in `pybamm.Simulation`) for best performance.
+- **Drive-cycle simulations** with no voltage events: use `CasadiSolver(mode="fast")` or `IDAKLUSolver`.
+- **Simple ODE-only models** (equivalent circuit, 0D): `ScipySolver` works well and has minimal dependencies.
+- **Batch parameter sweeps on GPU/TPU**: `JaxSolver` with `method="RK45"` enables JIT compilation.
+
+---
+
+## BaseSolver Common Interface
+
+All solvers inherit from `pybamm.BaseSolver` and share the following constructor parameters and methods.
+
+### Constructor Parameters
+
+<ParamField path="method" type="str" default="None">
+  Integration method name. Meaning is solver-specific.
+</ParamField>
+
+<ParamField path="rtol" type="float" default="1e-6">
+  Relative tolerance.
+</ParamField>
+
+<ParamField path="atol" type="float" default="1e-6">
+  Absolute tolerance.
+</ParamField>
+
+<ParamField path="root_method" type="str | algebraic solver" default="None">
+  Method used to compute consistent initial conditions for DAE problems. Options include `"casadi"`, `"lm"`, `"hybr"`, or a PyBaMM algebraic solver class.
+</ParamField>
+
+<ParamField path="root_tol" type="float" default="1e-6">
+  Tolerance for the initial-condition root-finding step.
+</ParamField>
+
+<ParamField path="extrap_tol" type="float" default="-1e-10">
+  Tolerance for detecting extrapolation beyond the solved time span.
+</ParamField>
+
+<ParamField path="on_extrapolation" type="str" default="&quot;warn&quot;">
+  Behaviour when extrapolation is detected. One of `"warn"`, `"error"`, or `"ignore"`.
+</ParamField>
+
+<ParamField path="output_variables" type="list[str]" default="[]">
+  If specified, only these variables are computed and returned (reduces memory usage).
+</ParamField>
+
+### `solve`
+
+```python
+solver.solve(model, t_eval, inputs=None, initial_conditions=None, ...)
+```
+
+Solve the model over the time span `t_eval` and return a `pybamm.Solution` object.
+
+### `step`
+
+```python
+solver.step(old_solution, model, dt, npts=2, inputs=None, ...)
+```
+
+Advance the solution by a single time step `dt`. Useful for online / real-time simulation.
+
+---
+
+## Setting Tolerances
+
+```python
+import pybamm
+
+# Tighter tolerances for high-accuracy simulations
+solver = pybamm.IDAKLUSolver(rtol=1e-8, atol=1e-8)
+
+# Looser tolerances for fast exploratory runs
+solver = pybamm.CasadiSolver(rtol=1e-3, atol=1e-6)
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.DFN(),
+    solver=solver,
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+)
+sol = sim.solve([0, 3600])
+```
+
+<Tip>
+  For production simulations with lithium-ion physics models, `IDAKLUSolver` is the recommended starting point. It handles both ODE and DAE systems, supports sparse KLU factorisation, and exposes a rich `options` dict for fine-tuning.
+</Tip>

@@ -1,0 +1,313 @@
+---
+title: "Simulation"
+description: "High-level interface for building, solving, and visualising PyBaMM battery models."
+---
+
+The `Simulation` class is the primary entry point for running PyBaMM simulations. It wraps a model together with parameter values, a solver, and optional experimental conditions, and exposes a simple `.solve()` → `.plot()` workflow.
+
+## Class signature
+
+```python
+pybamm.Simulation(
+    model,
+    experiment=None,
+    geometry=None,
+    parameter_values=None,
+    submesh_types=None,
+    var_pts=None,
+    spatial_methods=None,
+    solver=None,
+    output_variables=None,
+    C_rate=None,
+    discretisation_kwargs=None,
+    cache_esoh=True,
+)
+```
+
+## Constructor parameters
+
+<ParamField path="model" type="pybamm.BaseModel" required>
+  The model to be simulated. For example `pybamm.lithium_ion.DFN()` or `pybamm.lithium_ion.SPM()`.
+</ParamField>
+
+<ParamField path="experiment" type="pybamm.Experiment | str | list">
+  Experimental conditions under which to solve the model. Accepts a `pybamm.Experiment` instance, a single step string, or a list of step strings. If omitted, the simulation runs a simple constant-current (dis)charge controlled by `parameter_values`.
+</ParamField>
+
+<ParamField path="geometry" type="pybamm.Geometry">
+  The geometry on which to solve the model. Defaults to `model.default_geometry`.
+</ParamField>
+
+<ParamField path="parameter_values" type="pybamm.ParameterValues">
+  Parameter set to use. Defaults to `model.default_parameter_values`.
+</ParamField>
+
+<ParamField path="submesh_types" type="dict">
+  Mapping of subdomain names to submesh classes. Defaults to `model.default_submesh_types`.
+</ParamField>
+
+<ParamField path="var_pts" type="dict">
+  Number of mesh points for each spatial variable. Defaults to `model.default_var_pts`.
+</ParamField>
+
+<ParamField path="spatial_methods" type="dict">
+  Mapping of domain names to spatial method instances (e.g. `pybamm.FiniteVolume`). Defaults to `model.default_spatial_methods`.
+</ParamField>
+
+<ParamField path="solver" type="pybamm.BaseSolver">
+  The solver to use. Defaults to `model.default_solver`.
+</ParamField>
+
+<ParamField path="output_variables" type="list[str]">
+  Variable names to plot automatically when `plot()` is called without arguments.
+</ParamField>
+
+<ParamField path="C_rate" type="float">
+  C-rate for a constant-current (dis)charge. Only used when `experiment` is `None`. Sets `Current function [A]` in `parameter_values` to `C_rate * Nominal cell capacity [A.h]`.
+</ParamField>
+
+<ParamField path="discretisation_kwargs" type="dict">
+  Extra keyword arguments forwarded to `pybamm.Discretisation`. See `pybamm.Discretisation` for details.
+</ParamField>
+
+<ParamField path="cache_esoh" type="bool" default="True">
+  Whether to cache the electrode state-of-health (eSOH) solver between calls to `solve()`. Disabling this forces eSOH to be recomputed on every call, which is useful when parameters are modified in-place between solves.
+</ParamField>
+
+## Methods
+
+### `solve()`
+
+Build the model (if not already built) and run the solver. Returns a `pybamm.Solution` object.
+
+```python
+sim.solve(
+    t_eval=None,
+    solver=None,
+    save_at_cycles=None,
+    calc_esoh=None,
+    starting_solution=None,
+    initial_soc=None,
+    direction=None,
+    callbacks=None,
+    showprogress=False,
+    inputs=None,
+    t_interp=None,
+    **kwargs,
+)
+```
+
+<ParamField path="t_eval" type="array-like | list">
+  Times at which to return the solution. Required when **not** using an experiment or drive cycle. Can be `[t0, tf]` (returns 100 points) or a full array. Ignored when using an experiment.
+</ParamField>
+
+<ParamField path="solver" type="pybamm.BaseSolver">
+  Override the solver for this call only.
+</ParamField>
+
+<ParamField path="save_at_cycles" type="int | list[int]">
+  Which experiment cycles to store full sub-solutions for. Only valid when using an experiment. `None` saves all cycles.
+</ParamField>
+
+<ParamField path="calc_esoh" type="bool">
+  Whether to compute eSOH (electrode state-of-health) summary variables. Overrides the model default.
+</ParamField>
+
+<ParamField path="starting_solution" type="pybamm.Solution">
+  Resume stepping from a previous solution. Only valid when using an experiment.
+</ParamField>
+
+<ParamField path="initial_soc" type="float">
+  Initial State of Charge between 0 and 1. Overwrites initial concentrations from the parameter set.
+</ParamField>
+
+<ParamField path="callbacks" type="list">
+  Callback objects called at each time step. Each must implement all methods from `pybamm.callbacks.BaseCallback`.
+</ParamField>
+
+<ParamField path="showprogress" type="bool" default="false">
+  Show a progress bar over cycles. Has no effect without an experiment.
+</ParamField>
+
+<ParamField path="t_interp" type="array-like">
+  Times (in seconds) at which to interpolate the solution. Only valid for solvers that support intra-solve interpolation (`IDAKLUSolver`).
+</ParamField>
+
+---
+
+### `build()`
+
+Discretise the model into matrices and vectors. Called automatically by `solve()`. Use this to pre-build the model and inspect the discretised form.
+
+```python
+sim.build(initial_soc=None, direction=None, inputs=None)
+```
+
+<ParamField path="initial_soc" type="float">
+  Initial SOC between 0 and 1. Sets electrode stoichiometries via the eSOH solver.
+</ParamField>
+
+---
+
+### `plot()`
+
+Create an interactive `pybamm.QuickPlot` and call `dynamic_plot()`.
+
+```python
+sim.plot(output_variables=None, **kwargs)
+```
+
+<ParamField path="output_variables" type="list[str]">
+  Variable names to include. Defaults to `sim.output_variables` if set.
+</ParamField>
+
+<Warning>
+  `plot()` raises `ValueError` if the model has not been solved yet.
+</Warning>
+
+---
+
+### `save()` and `pybamm.load_sim()`
+
+Persist and reload a simulation using Python's `pickle` module.
+
+```python
+sim.save("my_simulation.pkl")
+
+sim2 = pybamm.load_sim("my_simulation.pkl")
+```
+
+<ParamField path="filename" type="str" required>
+  File path. Common extensions are `.pkl` or `.pickle`. Models using `convert_to_format = 'python'` cannot be saved.
+</ParamField>
+
+---
+
+### `save_model()`
+
+Write the built, discretised model to a JSON file for later use without rebuilding.
+
+```python
+sim.save_model(filename=None, mesh=False, variables=False)
+```
+
+<ParamField path="filename" type="str">
+  Output JSON file path. Auto-generated from the model name and current datetime if not provided.
+</ParamField>
+
+<ParamField path="mesh" type="bool" default="false">
+  Include the mesh in the saved file (required for plotting after reloading).
+</ParamField>
+
+<ParamField path="variables" type="bool" default="false">
+  Include discretised variables in the saved file. Also saves the mesh.
+</ParamField>
+
+<Note>
+  `save_model()` requires the model to be built first. Call `sim.build()` before saving. Experiments are not yet supported.
+</Note>
+
+---
+
+### `set_initial_state()`
+
+Set the initial state of charge or lithiation direction before building.
+
+```python
+sim.set_initial_state(initial_soc, direction=None, inputs=None)
+```
+
+<ParamField path="initial_soc" type="float" required>
+  Target SOC between 0 and 1.
+</ParamField>
+
+<ParamField path="direction" type="str">
+  `"discharge"` or `"charge"` — the lithiation direction used by the eSOH solver.
+</ParamField>
+
+## Properties
+
+<ResponseField name="solution" type="pybamm.Solution | None">
+  The most recent solution returned by `solve()`. `None` before the first solve.
+</ResponseField>
+
+<ResponseField name="model" type="pybamm.BaseModel">
+  The model (with parameters set if `build()` has been called).
+</ResponseField>
+
+<ResponseField name="parameter_values" type="pybamm.ParameterValues">
+  The parameter values currently in use.
+</ResponseField>
+
+<ResponseField name="solver" type="pybamm.BaseSolver">
+  The solver instance.
+</ResponseField>
+
+<ResponseField name="built_model" type="pybamm.BaseModel | None">
+  The fully discretised model. `None` until `build()` or `solve()` is called.
+</ResponseField>
+
+<ResponseField name="mesh" type="pybamm.Mesh | None">
+  The mesh used for discretisation.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```python Basic 1C discharge
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model)
+
+# Solve for 1 hour (3600 s)
+sim.solve([0, 3600])
+
+sim.plot()
+```
+
+```python With experiment
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+experiment = pybamm.Experiment(
+    [
+        ("Discharge at C/10 for 10 hours or until 3.3 V",
+         "Rest for 1 hour",
+         "Charge at 1 A until 4.1 V",
+         "Hold at 4.1 V until 50 mA"),
+    ] * 3  # repeat 3 cycles
+)
+
+sim = pybamm.Simulation(model, experiment=experiment)
+sim.solve()
+
+sol = sim.solution
+print(sol["Terminal voltage [V]"].entries)
+```
+
+```python Custom parameter values
+import pybamm
+
+model = pybamm.lithium_ion.SPMe()
+param = pybamm.ParameterValues("Chen2020")
+param["Electrode height [m]"] = 0.1
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+```
+
+```python Save and reload
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.save("sim.pkl")
+
+sim2 = pybamm.load_sim("sim.pkl")
+sim2.plot()
+```
+
+</CodeGroup>

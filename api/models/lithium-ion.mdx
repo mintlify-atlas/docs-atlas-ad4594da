@@ -1,0 +1,291 @@
+---
+title: "Lithium-Ion Models API"
+description: "Full-order and reduced-order lithium-ion battery models available in pybamm.lithium_ion."
+---
+
+The `pybamm.lithium_ion` module provides several electrochemical models of increasing complexity for lithium-ion cells. All models share the same `options` parameter interface and default parameter sets.
+
+## Available models
+
+| Class | Full name | Complexity |
+|---|---|---|
+| `SPM` | Single Particle Model | Lowest |
+| `SPMe` | Single Particle Model with electrolyte | Low |
+| `DFN` | Doyle-Fuller-Newman | High (full-order) |
+| `MPM` | Many Particle Model | Medium |
+| `MSMR` | Multi-Species Multi-Reaction | Medium |
+| `NewmanTobias` | Newman-Tobias | Medium |
+| `Yang2017` | Yang 2017 | Medium |
+
+Basic educational implementations are also available: `BasicSPM`, `BasicDFN`, `BasicDFNHalfCell`, `BasicDFNComposite`, `BasicDFN2D`, `Basic3DThermalSPM`, `SplitOCVR`.
+
+---
+
+## `pybamm.lithium_ion.SPM`
+
+Single Particle Model — the simplest lithium-ion model. Uses x-averaged kinetics and ignores electrolyte transport. Suitable for low C-rates.
+
+```python
+pybamm.lithium_ion.SPM(options=None, name="Single Particle Model", build=True)
+```
+
+<ParamField path="options" type="dict">
+  Model options dict. See [Options reference](#options-reference) below.
+</ParamField>
+
+<ParamField path="name" type="str" default="Single Particle Model">
+  Human-readable model name.
+</ParamField>
+
+<ParamField path="build" type="bool" default="true">
+  Build the model on instantiation. Set to `False` to modify sub-models before building.
+</ParamField>
+
+**Default parameter set:** `pybamm.ParameterValues("Marquis2019")`
+
+---
+
+## `pybamm.lithium_ion.SPMe`
+
+Single Particle Model with electrolyte — extends SPM with leading-order electrolyte effects. Good balance of speed and accuracy.
+
+```python
+pybamm.lithium_ion.SPMe(options=None, name="Single Particle Model with electrolyte", build=True)
+```
+
+**Default parameter set:** `pybamm.ParameterValues("Marquis2019")`
+
+---
+
+## `pybamm.lithium_ion.DFN`
+
+Doyle-Fuller-Newman model — the full-order porous electrode model. Resolves electrolyte concentration and potential throughout the cell. Recommended for higher C-rates and degradation studies.
+
+```python
+pybamm.lithium_ion.DFN(options=None, name="Doyle-Fuller-Newman model", build=True)
+```
+
+**Default parameter set:** `pybamm.ParameterValues("Marquis2019")`
+
+<Tip>
+  DFN is the most physically faithful standard model. Use it when SPM or SPMe predictions diverge from expected behaviour.
+</Tip>
+
+---
+
+## `pybamm.lithium_ion.MPM`
+
+Many Particle Model — accounts for a statistical distribution of particle sizes at each macroscale location.
+
+```python
+pybamm.lithium_ion.MPM(options=None, name="Many Particle Model", build=True)
+```
+
+---
+
+## `pybamm.lithium_ion.MSMR`
+
+Multi-Species Multi-Reaction model — resolves multiple lithiation reactions per electrode using the MSMR thermodynamic framework.
+
+```python
+pybamm.lithium_ion.MSMR(options=None, name="Multi-species multi-reaction model", build=True)
+```
+
+---
+
+## `pybamm.lithium_ion.NewmanTobias`
+
+Newman-Tobias model — a simplified DFN variant that uses linear concentration profiles in the electrolyte.
+
+```python
+pybamm.lithium_ion.NewmanTobias(options=None, name="Newman-Tobias model", build=True)
+```
+
+---
+
+## `pybamm.lithium_ion.Yang2017`
+
+Yang 2017 model — includes coupled mechanical effects (particle swelling, SEI) following Yang et al. (2017).
+
+```python
+pybamm.lithium_ion.Yang2017(options=None, name="Yang2017", build=True)
+```
+
+---
+
+## Options reference
+
+All lithium-ion models accept an `options` dict. Below are the most commonly used keys. A 2-tuple can be provided for most string options to specify different values for the negative and positive electrodes.
+
+<AccordionGroup>
+
+<Accordion title="Particle and electrode physics">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"particle"` | `"Fickian diffusion"`, `"uniform profile"`, `"quadratic profile"`, `"quartic profile"`, `"MSMR"` | `"Fickian diffusion"` |
+| `"particle shape"` | `"spherical"`, `"no particles"` | `"spherical"` |
+| `"particle size"` | `"single"`, `"distribution"` | `"single"` |
+| `"particle phases"` | `"1"`, `"2"` | `"1"` |
+| `"particle mechanics"` | `"none"`, `"swelling only"`, `"swelling and cracking"` | `"none"` |
+| `"stress-induced diffusion"` | `"false"`, `"true"` | `"false"` (or `"true"` if mechanics enabled) |
+
+</Accordion>
+
+<Accordion title="Kinetics">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"intercalation kinetics"` | `"symmetric Butler-Volmer"`, `"asymmetric Butler-Volmer"`, `"linear"`, `"Marcus"`, `"Marcus-Hush-Chidsey"`, `"MSMR"` | `"symmetric Butler-Volmer"` |
+| `"exchange-current density"` | `"single"`, `"current sigmoid"` | `"single"` |
+| `"interface utilisation"` | `"full"`, `"constant"`, `"current-driven"` | `"full"` |
+| `"open-circuit potential"` | `"single"`, `"current sigmoid"`, `"one-state hysteresis"`, `"one-state differential capacity hysteresis"`, `"MSMR"` | `"single"` |
+
+</Accordion>
+
+<Accordion title="Electrolyte">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"electrolyte conductivity"` | `"default"`, `"full"`, `"leading order"`, `"composite"`, `"integrated"` | `"default"` |
+| `"surface form"` | `"false"`, `"differential"`, `"algebraic"` | `"false"` |
+| `"diffusivity"` | `"single"`, `"current sigmoid"` | `"single"` |
+
+</Accordion>
+
+<Accordion title="Degradation: SEI">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"SEI"` | `"none"`, `"constant"`, `"reaction limited"`, `"reaction limited (asymmetric)"`, `"solvent-diffusion limited"`, `"electron-migration limited"`, `"interstitial-diffusion limited"`, `"ec reaction limited"`, `"ec reaction limited (asymmetric)"`, `"VonKolzenberg2020"`, `"tunnelling limited"` | `"none"` |
+| `"SEI film resistance"` | `"none"`, `"distributed"`, `"average"` | `"none"` (or `"distributed"` if SEI is enabled) |
+| `"SEI on cracks"` | `"false"`, `"true"` | `"false"` |
+| `"SEI porosity change"` | `"false"`, `"true"` | `"false"` |
+
+</Accordion>
+
+<Accordion title="Degradation: lithium plating">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"lithium plating"` | `"none"`, `"reversible"`, `"partially reversible"`, `"irreversible"` | `"none"` |
+| `"lithium plating porosity change"` | `"false"`, `"true"` | `"false"` |
+
+</Accordion>
+
+<Accordion title="Degradation: loss of active material">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"loss of active material"` | `"none"`, `"stress-driven"`, `"asymmetric stress-driven"`, `"reaction-driven"`, `"current-driven"`, `"stress and reaction-driven"`, `"asymmetric stress and reaction-driven"` | `"none"` |
+
+</Accordion>
+
+<Accordion title="Thermal">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"thermal"` | `"isothermal"`, `"lumped"`, `"x-lumped"`, `"x-full"` | `"isothermal"` |
+| `"cell geometry"` | `"arbitrary"`, `"pouch"`, `"cylindrical"` | `"arbitrary"` |
+| `"dimensionality"` | `0`, `1`, `2` | `0` |
+| `"calculate heat source for isothermal models"` | `"false"`, `"true"` | `"false"` |
+| `"use lumped thermal capacity"` | `"false"`, `"true"` | `"false"` |
+
+</Accordion>
+
+<Accordion title="Operating mode and circuit">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"operating mode"` | `"current"`, `"voltage"`, `"power"`, `"resistance"`, `"differential power"`, `"differential resistance"`, `"explicit power"`, `"explicit resistance"`, `"CCCV"`, callable | `"current"` |
+| `"working electrode"` | `"both"`, `"positive"` | `"both"` |
+| `"current collector"` | `"uniform"`, `"potential pair"`, `"potential pair quite conductive"` | `"uniform"` |
+| `"calculate discharge energy"` | `"false"`, `"true"` | `"false"` |
+| `"contact resistance"` | `"false"`, `"true"` | `"false"` |
+
+</Accordion>
+
+<Accordion title="x-average side reactions">
+
+| Option | Valid values | Default |
+|---|---|---|
+| `"x-average side reactions"` | `"false"`, `"true"` | `"true"` for SPM/MPM, `"false"` otherwise |
+| `"total interfacial current density as a state"` | `"false"`, `"true"` | `"false"` |
+| `"voltage as a state"` | `"false"`, `"true"` | `"false"` |
+
+</Accordion>
+
+</AccordionGroup>
+
+## Default parameter sets
+
+| Model | Default `ParameterValues` key |
+|---|---|
+| SPM, SPMe, DFN | `"Marquis2019"` |
+| MPM | `"Marquis2019"` |
+| MSMR | `"Xu2019"` |
+| Yang2017 | `"Yang2017"` |
+
+Other commonly used parameter sets: `"Chen2020"`, `"Ecker2015"`, `"NCA_Kim2011"`, `"OKane2022"`, `"Prada2013"`, `"Ramadass2004"`, `"MSMR_Example"`.
+
+## Examples
+
+<CodeGroup>
+
+```python DFN with SEI growth
+import pybamm
+
+model = pybamm.lithium_ion.DFN(
+    options={
+        "SEI": "reaction limited",
+        "SEI porosity change": "true",
+        "lithium plating": "none",
+    }
+)
+
+param = pybamm.ParameterValues("Chen2020")
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+```
+
+```python SPM with thermal model
+import pybamm
+
+model = pybamm.lithium_ion.SPM(
+    options={"thermal": "lumped"}
+)
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+print(sim.solution["X-averaged cell temperature [K]"].entries)
+```
+
+```python DFN half-cell (positive electrode only)
+import pybamm
+
+model = pybamm.lithium_ion.DFN(
+    options={"working electrode": "positive"}
+)
+```
+
+```python SPM with particle size distribution
+import pybamm
+
+model = pybamm.lithium_ion.SPM(
+    options={"particle size": "distribution"}
+)
+```
+
+```python MSMR model
+import pybamm
+
+model = pybamm.lithium_ion.MSMR(
+    options={
+        "open-circuit potential": "MSMR",
+        "particle": "MSMR",
+        "number of MSMR reactions": ("6", "4"),
+    }
+)
+```
+
+</CodeGroup>

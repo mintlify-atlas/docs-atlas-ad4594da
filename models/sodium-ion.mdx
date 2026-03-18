@@ -1,0 +1,122 @@
+---
+title: "Sodium-Ion Models"
+description: "Sodium-ion battery models in PyBaMM, including BasicDFN, and how they relate to the lithium-ion model family."
+---
+
+PyBaMM includes a sodium-ion battery model module under `pybamm.sodium_ion`. Sodium-ion (Na-ion) batteries share the same intercalation chemistry framework as lithium-ion batteries, so the models are structurally identical — the key differences are in the material parameters.
+
+## Relationship to lithium-ion models
+
+The sodium-ion `BasicDFN` inherits from `pybamm.lithium_ion.BaseModel` and implements the full Doyle-Fuller-Newman equations. This means:
+
+- The governing equations (particle diffusion, electrolyte transport, electrode potential, Butler-Volmer kinetics) are identical to `pybamm.lithium_ion.BasicDFN`
+- The model uses sodium-ion specific parameters via the `Chayambuka2022` parameter set
+- The same simulation workflow used for lithium-ion applies directly
+
+<Note>
+The sodium-ion module currently provides `BasicDFN` as a self-contained implementation. For more flexible model configuration (thermal options, degradation models, etc.), use `pybamm.lithium_ion.DFN` with a sodium-ion parameter set.
+</Note>
+
+---
+
+## Available models
+
+### BasicDFN
+
+The `BasicDFN` model is a complete implementation of the Doyle-Fuller-Newman equations for a sodium-ion cell. It is written as a single self-contained class (rather than using the submodel architecture), making the equations easy to read and modify.
+
+**Reference:** Marquis, S. G., et al. (2019). *An asymptotic derivation of a single particle model with electrolyte*. Journal of The Electrochemical Society. (DFN equations apply equally to Na-ion chemistry.)
+
+```python
+import pybamm
+
+model = pybamm.sodium_ion.BasicDFN()
+print(model.name)  # 'Doyle-Fuller-Newman model'
+
+# Default parameters use the Chayambuka2022 parameter set
+param = model.default_parameter_values
+print(type(param))  # pybamm.ParameterValues
+
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+---
+
+## Parameter set: Chayambuka2022
+
+The `BasicDFN` model defaults to the `Chayambuka2022` parameter set, which provides experimentally measured parameters for a sodium-ion cell.
+
+```python
+import pybamm
+
+# Load the Chayambuka2022 parameter set directly
+param = pybamm.ParameterValues("Chayambuka2022")
+
+# Use it with a lithium-ion DFN for more modelling flexibility
+model = pybamm.lithium_ion.DFN()
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+<Tip>
+Because sodium-ion and lithium-ion share the same electrochemical equations, any lithium-ion model in PyBaMM can be used with a sodium-ion parameter set. Use `pybamm.lithium_ion.DFN` (or `SPM`, `SPMe`, etc.) with `pybamm.ParameterValues("Chayambuka2022")` to access the full range of model options.
+</Tip>
+
+---
+
+## Comparing lithium-ion and sodium-ion simulations
+
+```python
+import pybamm
+import matplotlib.pyplot as plt
+
+# Sodium-ion BasicDFN
+na_model = pybamm.sodium_ion.BasicDFN()
+na_param = na_model.default_parameter_values
+na_sim = pybamm.Simulation(na_model, parameter_values=na_param)
+na_sim.solve([0, 3600])
+
+# Lithium-ion DFN with Chen2020 parameters
+li_model = pybamm.lithium_ion.DFN()
+li_param = pybamm.ParameterValues("Chen2020")
+li_sim = pybamm.Simulation(li_model, parameter_values=li_param)
+li_sim.solve([0, 3600])
+
+# Plot voltage comparison
+fig, ax = plt.subplots()
+t_na = na_sim.solution["Time [s]"].entries
+v_na = na_sim.solution["Voltage [V]"].entries
+t_li = li_sim.solution["Time [s]"].entries
+v_li = li_sim.solution["Voltage [V]"].entries
+ax.plot(t_na, v_na, label="Na-ion (Chayambuka2022)")
+ax.plot(t_li, v_li, label="Li-ion (Chen2020)")
+ax.set_xlabel("Time [s]")
+ax.set_ylabel("Voltage [V]")
+ax.legend()
+plt.show()
+```
+
+---
+
+## Variables available in BasicDFN
+
+The sodium-ion `BasicDFN` exposes the following variables in the solution:
+
+| Variable | Description |
+|---|---|
+| `"Negative particle concentration [mol.m-3]"` | Solid-phase concentration in negative electrode particles |
+| `"Positive particle concentration [mol.m-3]"` | Solid-phase concentration in positive electrode particles |
+| `"Negative particle surface concentration [mol.m-3]"` | Particle surface concentration (negative) |
+| `"Positive particle surface concentration [mol.m-3]"` | Particle surface concentration (positive) |
+| `"Electrolyte concentration [mol.m-3]"` | Electrolyte concentration across the full cell |
+| `"Voltage [V]"` | Terminal voltage |
+| `"Battery voltage [V]"` | Terminal voltage scaled by number of cells in series |
+| `"Current [A]"` | Applied current |
+| `"Discharge capacity [A.h]"` | Cumulative discharged capacity |
+
+<Tip>
+Call `pybamm.print_citations()` after running a simulation to see the full reference list for the models and parameter sets used.
+</Tip>

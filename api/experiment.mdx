@@ -1,0 +1,190 @@
+---
+title: "Experiment"
+description: "Define multi-step experimental protocols — charge, discharge, rest, and hold sequences — for battery simulations."
+---
+
+`pybamm.Experiment` encodes the electrical protocol applied to the battery during a simulation. Each experiment is composed of one or more **cycles**, and each cycle is a sequence of **steps**.
+
+## Class signature
+
+```python
+pybamm.Experiment(
+    operating_conditions,
+    period=None,
+    temperature=None,
+    termination=None,
+)
+```
+
+## Constructor parameters
+
+<ParamField path="operating_conditions" type="list[str | tuple | pybamm.step.BaseStep]" required>
+  A list of steps or cycles. Each element is either:
+  - A **string** describing a single step (parsed by `pybamm.step.string`).
+  - A **`pybamm.step.BaseStep`** object created with `pybamm.step.current()`, `pybamm.step.voltage()`, etc.
+  - A **tuple** of the above, grouping multiple steps into one cycle.
+
+  To repeat a cycle, use Python list multiplication: `[(...)] * N`.
+</ParamField>
+
+<ParamField path="period" type="str">
+  Output recording interval (1/frequency). Applies to all steps that do not specify their own period. Examples: `"1 minute"`, `"10 seconds"`. Default is 1 minute.
+</ParamField>
+
+<ParamField path="temperature" type="float | str">
+  Global experiment temperature. Overridden by a temperature specified in an individual step. If a float, the value is in Kelvin. If a string, use formats like `"25 oC"` or `"298.15 K"`. Defaults to the ambient temperature from the parameter set.
+</ParamField>
+
+<ParamField path="termination" type="str | list[str]">
+  Global stopping condition(s) for the **entire experiment** (not a single step). The experiment stops when any condition is met. Supported formats:
+  - Capacity: `"80% capacity"`, `"4 Ah capacity"`, `"4 A.h capacity"`
+  - Voltage: `"2.5 V"`
+  - Time: `"10 hours"`, `"60 minutes"`, `"3600 s"`
+</ParamField>
+
+## Step string syntax
+
+When passing a plain string as a step, PyBaMM parses it with `pybamm.step.string`. The following formats are supported:
+
+| Format | Example | Description |
+|---|---|---|
+| Discharge at constant current | `"Discharge at 1C for 1 hour"` | Constant C-rate discharge |
+| Discharge at current | `"Discharge at 1 A for 3600 seconds"` | Constant current in amps |
+| Charge at current | `"Charge at 0.5C until 4.2 V"` | Charge to voltage cut-off |
+| Charge at power | `"Charge at 5 W for 1 hour"` | Constant power |
+| Discharge at power | `"Discharge at 1 W until 2.5 V"` | Constant power to cut-off |
+| Hold at voltage | `"Hold at 4.2 V until C/50"` | CV hold until current drops |
+| Rest | `"Rest for 1 hour"` | Open circuit for a duration |
+| Discharge at resistance | `"Discharge at 1 Ohm for 1 hour"` | Constant resistance |
+
+### Step termination suffixes
+
+Each step string can include an optional termination clause `"or until <condition>"`:
+
+- `"for 1 hour"` — fixed duration
+- `"until 2.5 V"` — voltage cut-off
+- `"until C/50"` — C-rate cut-off (current drops below C/50)
+- `"until 50 mA"` — absolute current cut-off
+
+### Temperature override per step
+
+Append `"at 25 oC"` or `"at 298.15 K"` to any step string:
+
+```python
+"Discharge at 1C for 1 hour at 25 oC"
+```
+
+## `pybamm.step` module
+
+For programmatic step construction, use the `pybamm.step` functions instead of strings:
+
+| Function | Description |
+|---|---|
+| `pybamm.step.current(value, ...)` | Step controlled by current (A) |
+| `pybamm.step.c_rate(value, ...)` | Step controlled by C-rate |
+| `pybamm.step.voltage(value, ...)` | Step controlled by voltage (V) |
+| `pybamm.step.power(value, ...)` | Step controlled by power (W) |
+| `pybamm.step.resistance(value, ...)` | Step controlled by resistance (Ω) |
+| `pybamm.step.rest(duration, ...)` | Open-circuit rest step |
+| `pybamm.step.string(text)` | Parse a step from a string |
+
+## Attributes
+
+<ResponseField name="cycles" type="list[tuple]">
+  The operating conditions restructured as a list of cycles, where each cycle is a tuple of steps.
+</ResponseField>
+
+<ResponseField name="steps" type="list[pybamm.step.BaseStep]">
+  Flat list of all processed step objects in order.
+</ResponseField>
+
+<ResponseField name="unique_steps" type="set[pybamm.step.BaseStep]">
+  The set of distinct steps. Used internally to avoid redundant model builds.
+</ResponseField>
+
+<ResponseField name="termination" type="dict">
+  Parsed termination conditions as a dictionary, e.g. `{"capacity": (80.0, "%")}` or `{"voltage": (2.5, "V")}`.
+</ResponseField>
+
+<ResponseField name="period" type="float | None">
+  Global output period in seconds.
+</ResponseField>
+
+<ResponseField name="temperature" type="float | None">
+  Global temperature in Kelvin.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```python Simple discharge
+import pybamm
+
+experiment = pybamm.Experiment(
+    ["Discharge at C/10 for 10 hours or until 3.3 V"]
+)
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model, experiment=experiment)
+sim.solve()
+```
+
+```python Multi-step cycle repeated 3 times
+import pybamm
+
+experiment = pybamm.Experiment(
+    [
+        (
+            "Discharge at C/10 for 10 hours or until 3.3 V",
+            "Rest for 30 minutes",
+            "Charge at 1 A until 4.1 V",
+            "Hold at 4.1 V until 50 mA",
+        )
+    ] * 3,
+    period="10 seconds",
+)
+```
+
+```python Experiment termination at 80% capacity
+import pybamm
+
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0 V", "Charge at 1C until 4.2 V")],
+    termination="80% capacity",
+)
+```
+
+```python Programmatic steps with pybamm.step
+import pybamm
+
+experiment = pybamm.Experiment(
+    [
+        pybamm.step.c_rate(-1, duration=3600, termination="2.5 V"),
+        pybamm.step.rest(duration=600),
+        pybamm.step.current(1, duration=3600, termination="4.2 V"),
+    ]
+)
+```
+
+```python Temperature-controlled experiment
+import pybamm
+
+experiment = pybamm.Experiment(
+    [
+        "Discharge at 1C for 1 hour at 25 oC",
+        "Rest for 10 minutes at 25 oC",
+    ],
+    temperature="25 oC",
+)
+```
+
+</CodeGroup>
+
+<Tip>
+  To cycle an experiment N times, multiply the list: `[(...step tuple...)] * N`. Each element of the outer list is treated as one cycle.
+</Tip>
+
+<Note>
+  Global `termination` stops the **whole experiment**. Step-level termination (e.g. `"until 2.5 V"`) only ends the current step and moves to the next one.
+</Note>

@@ -1,0 +1,66 @@
+---
+title: "Introduction"
+description: "PyBaMM is an open-source battery simulation package written in Python for multi-institutional, interdisciplinary research."
+---
+
+PyBaMM (Python Battery Mathematical Modelling) is an open-source battery simulation package written in Python. Its mission is to accelerate battery modelling research by providing open-source tools for multi-institutional, interdisciplinary collaboration.
+
+PyBaMM consists of three main components:
+
+1. **A framework for writing and solving systems of differential equations** — flexible ODE/PDE definitions with multiple spatial discretisation methods and solvers.
+2. **A library of battery models and parameters** — ready-to-use physics-based models (SPM, SPMe, DFN, and more) backed by published parameter sets.
+3. **Specialized tools for battery simulation** — experiment definitions, result visualization, and batch study utilities.
+
+Together, these components enable flexible model definitions and fast battery simulations, letting you explore the effect of different battery designs and modelling assumptions under a variety of operating scenarios.
+
+## Key features
+
+<Columns cols={2}>
+  <Card title="Physics-based models" icon="flask">
+    Run the Single Particle Model (SPM), Single Particle Model with electrolyte (SPMe), Doyle-Fuller-Newman (DFN), and several other full-order lithium-ion models out of the box.
+  </Card>
+  <Card title="Solvers" icon="bolt">
+    Choose from CasADi-based solvers, SciPy integrators, and an optional JAX-based solver. PyBaMM automatically selects a sensible default for each model.
+  </Card>
+  <Card title="Parameter sets" icon="database">
+    Access a curated library of published parameter sets including Chen2020, Marquis2019, Ecker2015, OKane2022, and others. Swap parameters with a single line of code.
+  </Card>
+  <Card title="Experiments" icon="list-checks">
+    Define realistic cycling protocols in plain English — constant-current discharge, CC/CV charge, rest steps, and multi-cycle sequences via `pybamm.Experiment`.
+  </Card>
+  <Card title="Plotting" icon="chart-line">
+    Visualize any model variable over time or through the electrode thickness. `sim.plot()` produces an interactive plot of the most common outputs.
+  </Card>
+  <Card title="Batch studies" icon="layer-group">
+    Run parameter sweeps and compare results across models, parameter sets, or operating conditions using PyBaMM's simulation and solution APIs.
+  </Card>
+</Columns>
+
+## Get started
+
+<Columns cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run your first simulation in under five minutes.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install PyBaMM on Linux, macOS, or Windows.
+  </Card>
+</Columns>
+
+## NumFOCUS sponsorship
+
+PyBaMM uses an open governance model and is fiscally sponsored by [NumFOCUS](https://numfocus.org/). Consider making a [tax-deductible donation](https://numfocus.org/donate-for-pybamm) to help the project pay for developer time, professional services, travel, workshops, and other needs.
+
+## Citing PyBaMM
+
+If you use PyBaMM in your work, please cite:
+
+> Sulzer, V., Marquis, S. G., Timms, R., Robinson, M., & Chapman, S. J. (2021). Python Battery Mathematical Modelling (PyBaMM). _Journal of Open Research Software, 9(1)_. https://doi.org/10.5334/jors.309
+
+To find out which additional papers you should cite based on the models and solvers you use, add the following line to the end of your script:
+
+```python
+pybamm.print_citations()
+```
+
+Passing a filename to `print_citations` writes the BibTeX output to that file instead of the terminal.

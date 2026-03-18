@@ -1,0 +1,188 @@
+---
+title: Mesh
+description: The Mesh class assembles a collection of submeshes across all model domains. Submesh types and the number of grid points are configured via the submesh_types and var_pts dictionaries.
+---
+
+The mesh defines how each domain in the battery geometry is divided into discrete cells. PyBaMM provides several 1D submesh types with different node distributions, plus a 2D submesh for current-collector problems.
+
+## `pybamm.Mesh`
+
+```python
+pybamm.Mesh(geometry, submesh_types, var_pts)
+```
+
+<ParamField path="geometry" type="dict" required>
+  Geometry dictionary produced by e.g. `pybamm.battery_geometry()` after calling `param.process_geometry(geometry)`.
+</ParamField>
+
+<ParamField path="submesh_types" type="dict" required>
+  Maps domain name → submesh class or `MeshGenerator` instance. Example:
+
+  ```python
+  {
+      "negative electrode": pybamm.Uniform1DSubMesh,
+      "separator": pybamm.Uniform1DSubMesh,
+      "positive electrode": pybamm.Uniform1DSubMesh,
+  }
+  ```
+</ParamField>
+
+<ParamField path="var_pts" type="dict" required>
+  Maps spatial variable → number of cell-centre nodes. Can use variable objects or name strings as keys:
+
+  ```python
+  {pybamm.standard_spatial_vars.x_n: 10,
+   pybamm.standard_spatial_vars.x_s: 5,
+   pybamm.standard_spatial_vars.x_p: 10,
+   pybamm.standard_spatial_vars.r_n: 10,
+   pybamm.standard_spatial_vars.r_p: 10}
+  ```
+</ParamField>
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.SPM()
+param = pybamm.ParameterValues("Chen2020")
+
+geometry = model.default_geometry
+param.process_geometry(geometry)
+
+var_pts = {
+    pybamm.standard_spatial_vars.x_n: 10,
+    pybamm.standard_spatial_vars.x_s: 5,
+    pybamm.standard_spatial_vars.x_p: 10,
+    pybamm.standard_spatial_vars.r_n: 10,
+    pybamm.standard_spatial_vars.r_p: 10,
+}
+
+submesh_types = model.default_submesh_types
+
+mesh = pybamm.Mesh(geometry, submesh_types, var_pts)
+```
+
+---
+
+## `pybamm.MeshGenerator`
+
+A thin wrapper that pairs a submesh class with any extra keyword arguments needed at construction time.
+
+```python
+pybamm.MeshGenerator(submesh_type, submesh_params=None)
+```
+
+```python
+# Exponential mesh, clustered symmetrically
+generator = pybamm.MeshGenerator(
+    pybamm.Exponential1DSubMesh,
+    submesh_params={"side": "symmetric", "stretch": 1.5},
+)
+
+submesh_types = {
+    "negative electrode": generator,
+    "separator": pybamm.Uniform1DSubMesh,
+    "positive electrode": generator,
+}
+```
+
+---
+
+## Submesh Types
+
+### `Uniform1DSubMesh`
+
+Uniformly spaced nodes across the domain.
+
+```python
+pybamm.Uniform1DSubMesh
+```
+
+Best for homogeneous domains with no boundary layers.
+
+---
+
+### `Exponential1DSubMesh`
+
+Exponentially stretched nodes — concentrated near one or both boundaries.
+
+```python
+pybamm.MeshGenerator(
+    pybamm.Exponential1DSubMesh,
+    submesh_params={"side": "symmetric", "stretch": 1.15},
+)
+```
+
+<ParamField path="side" type="str" default="&quot;symmetric&quot;">
+  Which boundary to cluster near: `"left"`, `"right"`, or `"symmetric"`.
+</ParamField>
+
+<ParamField path="stretch" type="float" default="1.15 (symmetric) / 2.3 (left or right)">
+  Stretching factor α. As node count → ∞, the ratio of largest to smallest cell → exp(α).
+</ParamField>
+
+---
+
+### `Chebyshev1DSubMesh`
+
+Nodes placed at Chebyshev collocation points on (a, b), clustered near both boundaries.
+
+```python
+pybamm.Chebyshev1DSubMesh
+```
+
+Useful when you need polynomial interpolation properties or are solving with spectral methods.
+
+---
+
+### `UserSupplied1DSubMesh`
+
+Use your own array of edge locations.
+
+```python
+import numpy as np
+
+edges = np.array([0, 0.1, 0.3, 0.6, 1.0])  # custom edge positions
+
+generator = pybamm.MeshGenerator(
+    pybamm.UserSupplied1DSubMesh,
+    submesh_params={"edges": edges},
+)
+```
+
+---
+
+### `Uniform2DSubMesh`
+
+Uniform 2D mesh for current-collector domains. Requires `ScikitFiniteElement` as the corresponding spatial method.
+
+---
+
+## Controlling Resolution with `var_pts`
+
+The `var_pts` dictionary is the primary knob for trading accuracy against speed:
+
+```python
+# Coarse mesh — fast
+var_pts_coarse = {
+    pybamm.standard_spatial_vars.x_n: 5,
+    pybamm.standard_spatial_vars.x_s: 3,
+    pybamm.standard_spatial_vars.x_p: 5,
+    pybamm.standard_spatial_vars.r_n: 5,
+    pybamm.standard_spatial_vars.r_p: 5,
+}
+
+# Fine mesh — accurate
+var_pts_fine = {
+    pybamm.standard_spatial_vars.x_n: 30,
+    pybamm.standard_spatial_vars.x_s: 15,
+    pybamm.standard_spatial_vars.x_p: 30,
+    pybamm.standard_spatial_vars.r_n: 30,
+    pybamm.standard_spatial_vars.r_p: 30,
+}
+```
+
+String keys are also accepted:
+
+```python
+var_pts = {"x_n": 10, "x_s": 5, "x_p": 10, "r_n": 10, "r_p": 10}
+```

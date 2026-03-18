@@ -1,0 +1,123 @@
+---
+title: Spatial Methods
+description: Spatial methods control how PyBaMM discretises partial differential equations onto the mesh. The default for battery models is FiniteVolume, but SpectralVolume and finite-element methods are also available.
+---
+
+Spatial methods determine how differential operators (gradient, divergence, Laplacian) are approximated on the mesh. Each domain in the geometry can use a different spatial method.
+
+## Available Spatial Methods
+
+| Class | Module | Description | Typical use |
+|-------|--------|-------------|-------------|
+| `FiniteVolume` | `pybamm` | Cell-centred FVM. Conservative, handles discontinuities well. | Default for all 1D battery domains |
+| `SpectralVolume` | `pybamm` | Higher-order spectral volume method; extends `FiniteVolume`. | Smooth problems requiring high accuracy |
+| `ZeroDimensionalSpatialMethod` | `pybamm` | No spatial discretisation — scalar equations only. | 0D domains (e.g. current collectors in some models) |
+| `ScikitFiniteElement` | `pybamm` | 2D FEM via `scikit-fem`. | 2D current-collector models |
+
+---
+
+## FiniteVolume
+
+`pybamm.FiniteVolume` implements the standard cell-centred finite volume discretisation. It is the default method used by `pybamm.Simulation`.
+
+```python
+pybamm.FiniteVolume(options=None)
+```
+
+<ParamField path="options" type="dict | None" default="None">
+  Optional configuration dict. Supported key:
+  - `"extrapolation"`: controls boundary extrapolation order. Sub-keys `"order"` (default `"linear"` for values, `"quadratic"` for gradients) and `"use_bcs"` (bool).
+</ParamField>
+
+```python
+import pybamm
+
+# Default options
+fv = pybamm.FiniteVolume()
+
+# Custom extrapolation
+fv = pybamm.FiniteVolume(options={"extrapolation": {"order": "quadratic", "use_bcs": True}})
+```
+
+---
+
+## SpectralVolume
+
+`pybamm.SpectralVolume` extends `FiniteVolume` with a higher-order spectral reconstruction. It is compatible only with `SpectralVolume1DSubMesh`.
+
+```python
+pybamm.SpectralVolume(options=None, order=2)
+```
+
+<ParamField path="options" type="dict | None" default="None">
+  Same options as `FiniteVolume`.
+</ParamField>
+
+<ParamField path="order" type="int" default="2">
+  Polynomial order of the spectral reconstruction within each control volume.
+</ParamField>
+
+```python
+import pybamm
+
+sv = pybamm.SpectralVolume(order=4)
+```
+
+<Note>
+  `SpectralVolume` registers the Wang (2002) citation automatically on construction.
+</Note>
+
+---
+
+## ZeroDimensionalSpatialMethod
+
+Used for domains with no spatial variation. Applied automatically to 0D domains.
+
+```python
+pybamm.ZeroDimensionalSpatialMethod(options=None)
+```
+
+---
+
+## ScikitFiniteElement
+
+Provides 2D finite-element discretisation for current-collector models. Requires `scikit-fem` and `meshio`:
+
+```bash
+pip install pybamm[all]  # includes scikit-fem and meshio
+```
+
+```python
+pybamm.ScikitFiniteElement(options=None)
+```
+
+---
+
+## Passing Custom Spatial Methods to a Simulation
+
+Use the `spatial_methods` argument of `pybamm.Simulation` (or `pybamm.Discretisation`) to override the default per-domain:
+
+```python
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+param = pybamm.ParameterValues("Chen2020")
+
+spatial_methods = {
+    "macroscale": pybamm.FiniteVolume(),
+    "negative particle": pybamm.SpectralVolume(order=3),
+    "positive particle": pybamm.SpectralVolume(order=3),
+    "current collector": pybamm.ZeroDimensionalSpatialMethod(),
+}
+
+sim = pybamm.Simulation(
+    model,
+    parameter_values=param,
+    spatial_methods=spatial_methods,
+)
+sol = sim.solve([0, 3600])
+```
+
+<Tip>
+  For most simulations the default spatial methods are appropriate. Override only when you need higher spatial accuracy (e.g. `SpectralVolume`) or a 2D current-collector geometry.
+</Tip>

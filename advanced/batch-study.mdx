@@ -1,0 +1,202 @@
+---
+title: "Batch Study"
+description: "Run and compare multiple PyBaMM simulations in a single call using BatchStudy."
+---
+
+`pybamm.BatchStudy` automates running many `pybamm.Simulation` instances — useful for parameter sweeps, model comparisons, and sensitivity analyses. After solving, results from all simulations are available via `batch.sims` and can be plotted together with `batch.plot()`.
+
+## Constructor
+
+```python
+pybamm.BatchStudy(
+    models,
+    experiments=None,
+    geometries=None,
+    parameter_values=None,
+    submesh_types=None,
+    var_pts=None,
+    spatial_methods=None,
+    solvers=None,
+    output_variables=None,
+    C_rates=None,
+    repeats=1,
+    permutations=False,
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `models` | `dict` | **Required.** `{name: model}` mapping of models to simulate |
+| `experiments` | `dict`, optional | `{name: experiment}` mapping of `pybamm.Experiment` objects |
+| `geometries` | `dict`, optional | Custom geometry dicts |
+| `parameter_values` | `dict`, optional | `{name: pybamm.ParameterValues}` objects |
+| `submesh_types` | `dict`, optional | Custom submesh type dicts |
+| `var_pts` | `dict`, optional | Mesh resolution dicts |
+| `spatial_methods` | `dict`, optional | Spatial method dicts |
+| `solvers` | `dict`, optional | `{name: solver}` mapping |
+| `output_variables` | `dict`, optional | Variables to plot automatically |
+| `C_rates` | `dict`, optional | Constant-current (dis)charge C-rates |
+| `repeats` | `int` | Number of times to call `solve` per simulation (for timing averages). Default `1` |
+| `permutations` | `bool` | If `False` (default), pair models with corresponding entries by position. If `True`, run the Cartesian product of all inputs |
+
+<Note>
+When `permutations=False`, every non-`None` dict must have the same number of entries as `models`. A `ValueError` is raised otherwise.
+</Note>
+
+## solve()
+
+```python
+batch.solve(
+    t_eval=None,
+    solver=None,
+    save_at_cycles=None,
+    calc_esoh=True,
+    starting_solution=None,
+    initial_soc=None,
+    t_interp=None,
+    **kwargs,
+)
+```
+
+Arguments are forwarded to `pybamm.Simulation.solve()` for each simulation. After calling `solve()`, `batch.sims` contains a list of the solved `pybamm.Simulation` objects in the order they were run.
+
+## Use cases
+
+<Accordion title="Model comparison">
+Compare SPM, SPMe, and DFN under identical conditions:
+
+```python title="model_comparison.py"
+import pybamm
+
+param = pybamm.ParameterValues("Chen2020")
+
+batch = pybamm.BatchStudy(
+    models={
+        "SPM":  pybamm.lithium_ion.SPM(),
+        "SPMe": pybamm.lithium_ion.SPMe(),
+        "DFN":  pybamm.lithium_ion.DFN(),
+    },
+    parameter_values={
+        "SPM":  param,
+        "SPMe": param,
+        "DFN":  param,
+    },
+)
+
+batch.solve([0, 3600])
+batch.plot(["Voltage [V]", "Current [A]"])
+```
+</Accordion>
+
+<Accordion title="Parameter sweep">
+Sweep over different C-rates using `permutations=False` (one model, one C-rate per entry) or pair models with different parameter sets:
+
+```python title="parameter_sweep.py"
+import pybamm
+
+base = pybamm.ParameterValues("Chen2020")
+
+# Build three parameter sets with different initial SOC (via C_rates here we use
+# different parameter_values to change a physical property)
+pv_low  = base.copy()
+pv_mid  = base.copy()
+pv_high = base.copy()
+pv_low["Negative electrode diffusivity [m2.s-1]"]  = 1e-14
+pv_mid["Negative electrode diffusivity [m2.s-1]"]  = 3.3e-14
+pv_high["Negative electrode diffusivity [m2.s-1]"] = 1e-13
+
+model = pybamm.lithium_ion.SPM()
+
+batch = pybamm.BatchStudy(
+    models={
+        "low D":  model,
+        "mid D":  model,
+        "high D": model,
+    },
+    parameter_values={
+        "low D":  pv_low,
+        "mid D":  pv_mid,
+        "high D": pv_high,
+    },
+)
+
+batch.solve([0, 3600])
+batch.plot(["Voltage [V]"])
+```
+</Accordion>
+
+<Accordion title="Cartesian product of models and solvers">
+With `permutations=True`, every combination of the provided inputs is run:
+
+```python title="permutations.py"
+import pybamm
+
+batch = pybamm.BatchStudy(
+    models={
+        "SPM":  pybamm.lithium_ion.SPM(),
+        "DFN":  pybamm.lithium_ion.DFN(),
+    },
+    solvers={
+        "safe":  pybamm.CasadiSolver(mode="safe"),
+        "fast":  pybamm.CasadiSolver(mode="fast"),
+    },
+    permutations=True,  # runs 2 models × 2 solvers = 4 simulations
+)
+
+batch.solve([0, 3600])
+```
+</Accordion>
+
+## Accessing results
+
+After `batch.solve()`, iterate over `batch.sims`:
+
+```python title="access_results.py"
+import pybamm
+
+# After batch.solve([0, 3600]) ...
+for sim in batch.sims:
+    sol = sim.solution
+    t   = sol["Time [s]"].entries
+    V   = sol["Voltage [V]"].entries
+    print(f"Final voltage: {V[-1]:.4f} V")
+```
+
+If `repeats > 1`, `sim.solution.solve_time` and `sim.solution.integration_time` hold the **average** across repeats:
+
+```python title="timing.py"
+batch = pybamm.BatchStudy(
+    models={"SPM": pybamm.lithium_ion.SPM()},
+    repeats=5,
+)
+batch.solve([0, 3600])
+
+for sim in batch.sims:
+    print(f"Mean solve time: {sim.solution.solve_time:.4f} s")
+    print(f"Mean integration time: {sim.solution.integration_time:.4f} s")
+```
+
+## Plotting
+
+```python
+# Plot with default variables
+batch.plot()
+
+# Plot specific variables
+batch.plot(["Voltage [V]", "Cell temperature [K]"])
+
+# Create an animated GIF
+batch.create_gif(
+    number_of_images=80,
+    duration=0.1,
+    output_filename="comparison.gif",
+)
+```
+
+`batch.plot()` calls `pybamm.dynamic_plot(batch.sims, ...)` and returns a `QuickPlot` instance stored in `batch.quick_plot`.
+
+<Warning>
+`batch.create_gif()` raises a `ValueError` if called before `batch.solve()`. If `batch.plot()` has not been called, it creates a `QuickPlot` internally using `pybamm.QuickPlot(batch.sims)` before generating the GIF.
+</Warning>

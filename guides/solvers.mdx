@@ -1,0 +1,218 @@
+---
+title: Choosing and Configuring Solvers
+description: Overview of PyBaMM solvers, when to use each one, and how to configure tolerances, modes, and other solver options.
+---
+
+PyBaMM provides several solvers suited to different use cases. All solvers accept a common set of tolerance parameters and are interchangeable — you pass a solver instance to `pybamm.Simulation`.
+
+## Solver overview
+
+<CardGroup cols={2}>
+  <Card title="CasadiSolver" icon="bolt">
+    The recommended general-purpose solver. Uses CasADi for JIT-compiled, efficient integration. Supports DAEs, events, and multiple operating modes.
+  </Card>
+  <Card title="IDAKLUSolver" icon="rocket">
+    High-performance solver using SUNDIALS IDA with the KLU sparse direct solver. The fastest option for most PyBaMM models, especially in experiment mode or when solving many steps.
+  </Card>
+  <Card title="ScipySolver" icon="code">
+    Wraps `scipy.integrate.solve_ivp`. Easy to use and well-understood, but does not support DAEs or sensitivity analysis. Good for ODE-only models and debugging.
+  </Card>
+  <Card title="JaxSolver" icon="wand-magic-sparkles">
+    JAX-compiled solver, enabling JIT compilation and automatic differentiation. Requires Python ≥ 3.11 and is not available on Intel macOS.
+  </Card>
+</CardGroup>
+
+## CasadiSolver
+
+The default solver for most models. It compiles the model to a CasADi function and integrates using the CVODES/IDA integrators inside CasADi.
+
+```python
+solver = pybamm.CasadiSolver()
+```
+
+### Modes
+
+The `mode` parameter controls the integration strategy:
+
+| Mode | Description | When to use |
+|---|---|---|
+| `"safe"` (default) | Step-and-check in global steps of size `dt_max`, looking for events | Full charge/discharge simulations |
+| `"fast"` | Direct integration without event detection | Drive cycles or simulations where no events should be triggered |
+| `"fast with events"` | Direct integration, then retrospectively check for events | Experimental |
+| `"safe without grid"` | Step-by-step without pre-computing the time grid | Experimental; can be faster in some cases |
+
+```python
+# Fast mode for drive cycles
+solver = pybamm.CasadiSolver(mode="fast")
+
+# Safe mode with custom step size
+solver = pybamm.CasadiSolver(mode="safe", dt_max=60)  # 60 s max step
+```
+
+### Key options
+
+```python
+solver = pybamm.CasadiSolver(
+    mode="safe",
+    rtol=1e-6,                         # relative tolerance (default: 1e-6)
+    atol=1e-6,                         # absolute tolerance (default: 1e-6)
+    root_method="casadi",               # method for finding DAE initial conditions
+    root_tol=1e-6,                     # root-finding tolerance
+    max_step_decrease_count=5,         # max step size reductions before error
+    dt_max=600,                        # max step size in "safe" mode [s]
+    on_extrapolation="error",          # "error", "warn", or "ignore"
+    return_solution_if_failed_early=False,
+    extra_options_setup={"max_num_steps": 10000},  # passed to CasADi integrator
+)
+```
+
+## IDAKLUSolver
+
+The fastest solver for PyBaMM models. Uses the SUNDIALS IDA time integrator with the KLU sparse linear solver, called via the `pybammsolvers` package.
+
+```python
+solver = pybamm.IDAKLUSolver()
+```
+
+### Key options
+
+```python
+solver = pybamm.IDAKLUSolver(
+    rtol=1e-4,          # relative tolerance (default: 1e-4)
+    atol=1e-6,          # absolute tolerance (default: 1e-6)
+    root_method="casadi",
+    on_extrapolation="warn",
+    output_variables=[  # pre-specify variables to avoid computing the full state
+        "Battery voltage [V]",
+        "Current [A]",
+    ],
+)
+```
+
+### `output_variables` for speed
+
+When you only need a small set of outputs, specifying `output_variables` avoids computing and storing the full state vector:
+
+```python
+solver = pybamm.IDAKLUSolver(
+    output_variables=[
+        "Battery voltage [V]",
+        "Discharge capacity [A.h]",
+        "Cell temperature [K]",
+    ]
+)
+sim = pybamm.Simulation(model, solver=solver)
+sol = sim.solve([0, 3600])
+```
+
+### Parallel solving
+
+`IDAKLUSolver` can solve multiple input sets in parallel using OpenMP threads:
+
+```python
+solver = pybamm.IDAKLUSolver(
+    options={"num_threads": 4, "num_solvers": 4}
+)
+
+# Solve with a list of input dicts in parallel
+input_list = [
+    {"Current function [A]": 1.0},
+    {"Current function [A]": 2.0},
+    {"Current function [A]": 5.0},
+]
+sol = sim.solve([0, 3600], inputs=input_list)
+```
+
+## ScipySolver
+
+Wraps `scipy.integrate.solve_ivp`. Only supports ODE models (no algebraic equations), so it cannot solve DFN or SPMe without modification.
+
+```python
+solver = pybamm.ScipySolver(
+    method="BDF",           # default; other scipy methods also work
+    rtol=1e-6,
+    atol=1e-6,
+    on_extrapolation="warn",
+)
+```
+
+<Warning>
+  `ScipySolver` does not support sensitivity analysis and cannot solve DAE systems. It is best suited to ODE-only models or for quick debugging.
+</Warning>
+
+## JaxSolver
+
+A JAX-based solver that enables JIT compilation and compatibility with JAX's automatic differentiation.
+
+```python
+solver = pybamm.JaxSolver(
+    method="BDF",   # "BDF" (default) or "RK45"
+    rtol=1e-6,
+    atol=1e-6,
+)
+```
+
+The model must be built with JAX format:
+
+```python
+model = pybamm.lithium_ion.SPM()
+model.convert_to_format = "jax"
+
+sim = pybamm.Simulation(model, solver=pybamm.JaxSolver())
+```
+
+<Warning>
+  **JAX solver requirements:**
+  - Python ≥ 3.11
+  - Not available on Intel macOS
+  - Install with: `pip install pybamm[jax]`
+  - Does not support models with termination events
+  - Requires `model.convert_to_format = "jax"`
+</Warning>
+
+## Passing a solver to Simulation
+
+```python
+model = pybamm.lithium_ion.DFN()
+
+# Use CasadiSolver in fast mode
+solver = pybamm.CasadiSolver(mode="fast", rtol=1e-6, atol=1e-6)
+sim = pybamm.Simulation(model, solver=solver)
+sol = sim.solve([0, 3600])
+```
+
+You can also override the solver at solve time:
+
+```python
+sol = sim.solve([0, 3600], solver=pybamm.IDAKLUSolver())
+```
+
+## Choosing a solver
+
+| Scenario | Recommended solver |
+|---|---|
+| General-purpose charge/discharge | `CasadiSolver(mode="safe")` |
+| Drive cycle (no events expected) | `CasadiSolver(mode="fast")` |
+| Maximum performance / experiment cycling | `IDAKLUSolver()` |
+| Only need a few output variables | `IDAKLUSolver(output_variables=[...])` |
+| ODE-only model, quick debugging | `ScipySolver()` |
+| JAX ecosystem / AD through solve | `JaxSolver()` |
+
+## Adjusting tolerances
+
+All solvers accept `rtol` (relative) and `atol` (absolute) tolerance parameters. Tighter tolerances improve accuracy at the cost of speed:
+
+```python
+# Default tolerances (1e-6 / 1e-6) for most solvers
+solver = pybamm.CasadiSolver(rtol=1e-6, atol=1e-6)
+
+# Tighter tolerances for more accurate results
+solver = pybamm.CasadiSolver(rtol=1e-8, atol=1e-8)
+
+# IDAKLU defaults to rtol=1e-4 (looser but faster)
+solver = pybamm.IDAKLUSolver(rtol=1e-4, atol=1e-6)
+```
+
+<Tip>
+  For degradation studies requiring many cycles, start with `IDAKLUSolver` and loosen tolerances (`rtol=1e-4`) for speed. For a single precise discharge, use `CasadiSolver` with default tolerances.
+</Tip>

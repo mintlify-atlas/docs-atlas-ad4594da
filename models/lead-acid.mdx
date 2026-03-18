@@ -1,0 +1,193 @@
+---
+title: "Lead-Acid Models"
+description: "Physics-based lead-acid battery models in PyBaMM, including the Full porous-electrode model, the Leading-Order Quasi-Static (LOQS) model, and BasicFull."
+---
+
+PyBaMM includes a set of physics-based models for lead-acid batteries derived from the Newman-Tiedemann porous-electrode framework. All models are available under the `pybamm.lead_acid` namespace.
+
+<Note>
+Lead-acid models use `pybamm.LeadAcidParameters` and default to the `Sulzer2019` parameter set. Unlike lithium-ion models, there are no particles: the electrode active material is modelled as a solid reactant with no diffusion.
+</Note>
+
+## Available models
+
+| Model | Electrolyte diffusion | Spatial resolution | Use case |
+|---|---|---|---|
+| `Full` | Full (spatially resolved) | Full 1D | High-fidelity simulation |
+| `LOQS` | Leading-order (spatially averaged) | 0D / 1D | Fast simulation, parameter sweeps |
+| `BasicFull` | Full | Full 1D | Education and model exploration |
+
+---
+
+## Models
+
+<Tabs>
+  <Tab title="Full">
+
+### Full model
+
+The `Full` model is a porous-electrode model for lead-acid batteries based on the Newman-Tiedemann framework as described in Sulzer et al. (2019). It resolves spatial distributions of electrolyte concentration and potential, electrode potential, and porosity across the cell sandwich.
+
+**When to use:** High-accuracy simulations where spatial gradients in electrolyte concentration and porosity are important, including during high-rate discharge or charge.
+
+**Reference:** Sulzer, V., et al. (2019). *Faster Lead-Acid Battery Simulations from Porous-Electrode Theory: Part I. Physical Model*. Journal of The Electrochemical Society.
+
+```python
+import pybamm
+
+model = pybamm.lead_acid.Full()
+print(model.name)  # 'Full model'
+
+param = model.default_parameter_values  # Sulzer2019
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="LOQS">
+
+### Leading-Order Quasi-Static model
+
+The `LOQS` model is derived by an asymptotic expansion in the applied current, retaining only the leading-order terms. Electrolyte concentration and porosity are spatially uniform (x-averaged). This makes the model significantly faster than the Full model.
+
+**When to use:** Rapid simulations, state estimation, parameter identification, or any case where spatial gradients in the electrolyte are secondary.
+
+**Reference:** Sulzer, V., et al. (2019). *Faster Lead-Acid Battery Simulations from Porous-Electrode Theory: Part II. Asymptotic Analysis*. Journal of The Electrochemical Society.
+
+<Note>
+The LOQS model does not use a Jacobian by default when `dimensionality=0`. This makes it particularly efficient for 0D simulations.
+</Note>
+
+```python
+import pybamm
+
+model = pybamm.lead_acid.LOQS()
+print(model.name)  # 'LOQS model'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+  <Tab title="BasicFull">
+
+### BasicFull
+
+The `BasicFull` model implements the same physics as `Full` but in a single self-contained class, making the governing equations directly visible. It does not use the submodel architecture and is less flexible, but is easier to read and modify for educational purposes.
+
+**When to use:** Understanding the governing equations, developing new models, or teaching. For production use, prefer `pybamm.lead_acid.Full`.
+
+**Reference:** Sulzer, V., et al. (2019). *Faster Lead-Acid Battery Simulations from Porous-Electrode Theory: Part I. Physical Model*. Journal of The Electrochemical Society.
+
+```python
+import pybamm
+
+model = pybamm.lead_acid.BasicFull()
+print(model.name)  # 'Basic full model'
+
+sim = pybamm.Simulation(model)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+  </Tab>
+</Tabs>
+
+---
+
+## Lead-acid specific options
+
+<AccordionGroup>
+  <Accordion title="Hydrolysis (oxygen evolution)">
+
+Lead-acid cells produce oxygen at the positive plate during overcharge via electrolyte hydrolysis. Enabling this option adds oxygen diffusion and reaction submodels.
+
+| Option | Values | Default |
+|---|---|---|
+| `"hydrolysis"` | `"false"`, `"true"` | `"false"` |
+
+<Warning>
+When `"hydrolysis"` is `"true"`, `"surface form"` cannot be `"false"`. Use `"algebraic"` or `"differential"` instead.
+</Warning>
+
+```python
+model = pybamm.lead_acid.Full(
+    options={
+        "hydrolysis": "true",
+        "surface form": "algebraic",
+    }
+)
+```
+
+  </Accordion>
+  <Accordion title="Convection">
+
+Gas evolution during charge drives electrolyte convection. This can be modelled with a uniform transverse or fully resolved transverse convection model.
+
+| Option | Values | Default |
+|---|---|---|
+| `"convection"` | `"none"`, `"uniform transverse"`, `"full transverse"` | `"none"` |
+
+```python
+model = pybamm.lead_acid.Full(
+    options={"convection": "uniform transverse"}
+)
+```
+
+  </Accordion>
+  <Accordion title="Thermal">
+
+| Option | Values | Default |
+|---|---|---|
+| `"thermal"` | `"isothermal"`, `"lumped"`, `"x-lumped"`, `"x-full"` | `"isothermal"` |
+
+```python
+model = pybamm.lead_acid.Full(
+    options={"thermal": "lumped"}
+)
+```
+
+  </Accordion>
+  <Accordion title="Operating mode">
+
+Control how the external circuit condition is applied. The LOQS model supports callable operating modes via an algebraic constraint.
+
+| Option | Values | Default |
+|---|---|---|
+| `"operating mode"` | `"current"`, `"voltage"`, `"power"`, `"resistance"`, `"CCCV"`, callable | `"current"` |
+
+```python
+model = pybamm.lead_acid.LOQS(
+    options={"operating mode": "voltage"}
+)
+```
+
+  </Accordion>
+</AccordionGroup>
+
+### Example with options
+
+```python
+import pybamm
+
+# Full lead-acid model with oxygen evolution and uniform convection
+model = pybamm.lead_acid.Full(
+    options={
+        "hydrolysis": "true",
+        "surface form": "algebraic",
+        "convection": "uniform transverse",
+        "thermal": "isothermal",
+    }
+)
+
+param = model.default_parameter_values  # Sulzer2019
+sim = pybamm.Simulation(model, parameter_values=param)
+sim.solve([0, 3600])
+sim.plot()
+```
+
+<Tip>
+Call `pybamm.print_citations()` after running a simulation to get the full citation list for the models and parameters used.
+</Tip>

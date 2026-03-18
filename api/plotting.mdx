@@ -1,0 +1,259 @@
+---
+title: Plotting
+description: PyBaMM provides several plotting utilities — from interactive dynamic plots of solution variables to specialised voltage decomposition and cycle-degradation charts.
+---
+
+All plotting functions require `matplotlib`. Install it with:
+
+```bash
+pip install pybamm[plot]
+```
+
+---
+
+## `pybamm.QuickPlot`
+
+Generates a grid of subplots for a set of output variables from one or more solutions.
+
+```python
+pybamm.QuickPlot(
+    solutions,
+    output_variables=None,
+    labels=None,
+    colors=None,
+    linestyles=None,
+    shading="auto",
+    figsize=None,
+    n_rows=None,
+    time_unit=None,
+    spatial_unit="um",
+    variable_limits="fixed",
+    n_t_linear=100,
+)
+```
+
+<ParamField path="solutions" type="Solution | Simulation | list" required>
+  A single or list of `pybamm.Solution` or `pybamm.Simulation` objects to plot.
+</ParamField>
+
+<ParamField path="output_variables" type="list[str] | None" default="None">
+  Variables to include in the plot. Defaults to a model-specific set of key outputs.
+</ParamField>
+
+<ParamField path="labels" type="list[str] | None" default="None">
+  Legend labels for each solution. Defaults to the model names.
+</ParamField>
+
+<ParamField path="colors" type="list[str] | None" default="None">
+  Colour cycle to use. Defaults to the active matplotlib style.
+</ParamField>
+
+<ParamField path="linestyles" type="list[str] | None" default='["-", ":", "--", "-."]'>
+  Linestyle cycle.
+</ParamField>
+
+<ParamField path="shading" type="str" default="&quot;auto&quot;">
+  Shading mode for 2D (pcolormesh) panels.
+</ParamField>
+
+<ParamField path="figsize" type="tuple[float, float] | None" default="None">
+  Figure size in inches, forwarded to `plt.figure`.
+</ParamField>
+
+<ParamField path="n_rows" type="int | None" default="None">
+  Number of subplot rows. If `None`, a square-ish layout is used.
+</ParamField>
+
+<ParamField path="time_unit" type="str | None" default="None">
+  Time axis unit: `"hours"`, `"minutes"`, or `"seconds"`.
+</ParamField>
+
+<ParamField path="spatial_unit" type="str" default="&quot;um&quot;">
+  Spatial axis unit: `"m"`, `"mm"`, or `"um"`.
+</ParamField>
+
+<ParamField path="variable_limits" type="str | dict" default="&quot;fixed&quot;">
+  Axis / colorbar limits.
+  - `"fixed"`: axes do not move as time progresses.
+  - `"tight"`: axes rescale at each time step.
+  - `dict`: per-variable control, e.g. `{"Terminal voltage [V]": (3.0, 4.2)}`.
+</ParamField>
+
+<ParamField path="n_t_linear" type="int" default="100">
+  Number of linearly-spaced time points added per sub-solution (when Hermite interpolation is available).
+</ParamField>
+
+---
+
+## `pybamm.dynamic_plot`
+
+Open an interactive slider plot.
+
+```python
+pybamm.dynamic_plot(solutions, output_variables=None, **kwargs)
+```
+
+Accepts the same keyword arguments as `QuickPlot`. Returns the `QuickPlot` instance.
+
+```python
+import pybamm
+
+sim = pybamm.Simulation(pybamm.lithium_ion.DFN(),
+                        parameter_values=pybamm.ParameterValues("Chen2020"))
+sol = sim.solve([0, 3600])
+
+pybamm.dynamic_plot(sol)
+```
+
+---
+
+## `pybamm.plot`
+
+Convenience wrapper — equivalent to `pybamm.QuickPlot(solutions, ...).plot(t=0)` followed by `plt.show()`.
+
+```python
+pybamm.plot(solutions, output_variables=None, **kwargs)
+```
+
+---
+
+## `pybamm.plot2D`
+
+Generate a filled contour (`contourf`) plot of a 2D PyBaMM array.
+
+```python
+pybamm.plot2D(x, y, z, ax=None, show_plot=True, **kwargs)
+```
+
+<ParamField path="x" type="pybamm.Array" required>
+  Array for the x-axis. Shape `(M, N)` or `(N, 1)`.
+</ParamField>
+
+<ParamField path="y" type="pybamm.Array" required>
+  Array for the y-axis. Shape `(M, N)` or `(M, 1)`.
+</ParamField>
+
+<ParamField path="z" type="pybamm.Array" required>
+  Array for the z-axis (colour values). Shape `(M, N)`.
+</ParamField>
+
+<ParamField path="ax" type="matplotlib.axes.Axes | None" default="None">
+  Axis to plot on. If `None`, a new figure is created.
+</ParamField>
+
+<ParamField path="show_plot" type="bool" default="true">
+  Whether to call `plt.show()`. Set to `False` when embedding in a larger figure.
+</ParamField>
+
+```python
+import pybamm
+
+x = pybamm.Array([[1, 2], [1, 2]])
+y = pybamm.Array([[1, 1], [2, 2]])
+z = pybamm.Array([[0.1, 0.4], [0.3, 0.9]])
+
+pybamm.plot2D(x, y, z)
+```
+
+---
+
+## `pybamm.plot_voltage_components`
+
+Decomposes the terminal voltage into its constituent overpotentials and plots them as stacked filled areas.
+
+```python
+pybamm.plot_voltage_components(
+    input_data,
+    ax=None,
+    show_legend=True,
+    split_by_electrode=False,
+    electrode_phases=("primary", "primary"),
+    show_plot=True,
+    **kwargs_fill,
+)
+```
+
+<ParamField path="input_data" type="pybamm.Solution | pybamm.Simulation" required>
+  Solved simulation or solution object.
+</ParamField>
+
+<ParamField path="ax" type="matplotlib.axes.Axes | None" default="None">
+  Axis to draw on. Creates a new figure if `None`.
+</ParamField>
+
+<ParamField path="show_legend" type="bool" default="true">
+  Whether to show the legend.
+</ParamField>
+
+<ParamField path="split_by_electrode" type="bool" default="false">
+  Show separate overpotentials for the negative and positive electrodes.
+</ParamField>
+
+<ParamField path="electrode_phases" type="tuple[str, str]" default="(&quot;primary&quot;, &quot;primary&quot;)">
+  Phase labels for composite-electrode models.
+</ParamField>
+
+<ParamField path="show_plot" type="bool" default="true">
+  Whether to call `plt.show()`.
+</ParamField>
+
+```python
+import pybamm
+
+sim = pybamm.Simulation(
+    pybamm.lithium_ion.DFN(),
+    parameter_values=pybamm.ParameterValues("Chen2020"),
+)
+sol = sim.solve([0, 3600])
+pybamm.plot_voltage_components(sol)
+```
+
+---
+
+## `pybamm.plot_summary_variables`
+
+Plot summary variables (capacity fade, lithium inventory loss, etc.) across multiple cycles.
+
+```python
+pybamm.plot_summary_variables(
+    solutions,
+    output_variables=None,
+    labels=None,
+    show_plot=True,
+    **kwargs_fig,
+)
+```
+
+<ParamField path="solutions" type="pybamm.Solution | list[pybamm.Solution]" required>
+  One or more solutions from a multi-cycle experiment.
+</ParamField>
+
+<ParamField path="output_variables" type="list[str] | None" default="None">
+  Variables to plot. Defaults to capacity, lithium inventory, active material loss, and stoichiometry limits.
+</ParamField>
+
+<ParamField path="labels" type="list[str] | None" default="None">
+  Legend labels for each solution.
+</ParamField>
+
+<ParamField path="show_plot" type="bool" default="true">
+  Whether to call `plt.show()`.
+</ParamField>
+
+Default `output_variables`:
+- `"Capacity [A.h]"`
+- `"Loss of lithium inventory [%]"`
+- `"Total capacity lost to side reactions [A.h]"`
+- `"Loss of active material in negative electrode [%]"`
+- `"Loss of active material in positive electrode [%]"`
+- `"x_100"`, `"x_0"`, `"y_100"`, `"y_0"`
+
+---
+
+## `pybamm.close_plots`
+
+Close all open matplotlib figures.
+
+```python
+pybamm.close_plots()
+```

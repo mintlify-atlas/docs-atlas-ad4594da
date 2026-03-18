@@ -1,122 +1,139 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "PyBaMM",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#f4dd5e",
+    "light": "#4278a3",
+    "dark": "#9abcb4"
   },
   "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/pybamm-team/PyBaMM"
     }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/pybamm-team/PyBaMM"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/models",
+              "guides/simulations",
+              "guides/experiments",
+              "guides/parameters",
+              "guides/solvers",
+              "guides/plotting"
+            ]
+          },
+          {
+            "group": "Battery Models",
+            "pages": [
+              "models/lithium-ion",
+              "models/lead-acid",
+              "models/equivalent-circuit",
+              "models/sodium-ion"
+            ]
+          },
+          {
+            "group": "Advanced Usage",
+            "pages": [
+              "advanced/custom-models",
+              "advanced/spatial-methods",
+              "advanced/batch-study",
+              "advanced/callbacks"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/simulation",
+              "api/experiment",
+              "api/solution"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/base-model",
+              "api/models/lithium-ion",
+              "api/models/lead-acid",
+              "api/models/equivalent-circuit"
+            ]
+          },
+          {
+            "group": "Parameters",
+            "pages": [
+              "api/parameters/parameter-values",
+              "api/parameters/parameter-sets"
+            ]
+          },
+          {
+            "group": "Solvers",
+            "pages": [
+              "api/solvers/overview",
+              "api/solvers/casadi",
+              "api/solvers/scipy",
+              "api/solvers/idaklu",
+              "api/solvers/jax"
+            ]
+          },
+          {
+            "group": "Spatial Methods & Mesh",
+            "pages": [
+              "api/spatial-methods",
+              "api/mesh"
+            ]
+          },
+          {
+            "group": "Plotting",
+            "pages": [
+              "api/plotting"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/batch-study",
+              "api/callbacks",
+              "api/citations"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

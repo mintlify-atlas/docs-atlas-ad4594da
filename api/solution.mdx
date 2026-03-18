@@ -1,0 +1,231 @@
+---
+title: "Solution"
+description: "Access and post-process simulation results returned by pybamm.Simulation.solve()."
+---
+
+A `pybamm.Solution` object is returned by `sim.solve()`. It stores the time vector, state trajectories, and processed variables, and provides methods to plot and export results.
+
+## Accessing variables
+
+Index a solution with a variable name to obtain a `ProcessedVariable`:
+
+```python
+sol = sim.solve([0, 3600])
+
+voltage = sol["Terminal voltage [V]"]
+print(voltage.entries)   # numpy array of values
+print(voltage.t)         # numpy array of times
+```
+
+<Tip>
+  Variable names in PyBaMM include their units in square brackets, e.g. `"Terminal voltage [V]"`, `"Current [A]"`, `"X-averaged cell temperature [K]"`.
+</Tip>
+
+## ProcessedVariable
+
+Indexing a `Solution` returns a `ProcessedVariable` object.
+
+<ResponseField name="entries" type="numpy.ndarray">
+  The variable values evaluated at all solution time points. For spatially resolved variables the shape is `(n_spatial_points, n_times)`.
+</ResponseField>
+
+<ResponseField name="t" type="numpy.ndarray">
+  The time points at which this variable was evaluated (seconds).
+</ResponseField>
+
+<ResponseField name="x" type="numpy.ndarray | None">
+  Spatial coordinates for spatially resolved variables. `None` for scalar variables.
+</ResponseField>
+
+<ResponseField name="data" type="numpy.ndarray">
+  Alias for `entries`. Provided for compatibility.
+</ResponseField>
+
+You can also call a `ProcessedVariable` at a specific time:
+
+```python
+voltage = sol["Terminal voltage [V]"]
+v_at_t = voltage(t=1800)  # interpolate at t = 1800 s
+```
+
+## Solution properties
+
+<ResponseField name="t" type="numpy.ndarray">
+  All times at which the solution is evaluated (seconds), concatenated across sub-solutions.
+</ResponseField>
+
+<ResponseField name="y" type="numpy.ndarray | casadi.DM">
+  Full state vector of shape `(n_states, n_times)`.
+</ResponseField>
+
+<ResponseField name="cycles" type="list[pybamm.Solution]">
+  List of per-cycle sub-solutions. Only populated when using a `pybamm.Experiment`.
+</ResponseField>
+
+<ResponseField name="termination" type="str">
+  Human-readable reason the solver stopped, e.g. `"final time"`, `"event: Minimum voltage"`, or `"event: Maximum voltage"`.
+</ResponseField>
+
+<ResponseField name="solve_time" type="datetime.timedelta">
+  Wall-clock time spent inside the solver.
+</ResponseField>
+
+<ResponseField name="set_up_time" type="datetime.timedelta">
+  Wall-clock time spent building and discretising the model.
+</ResponseField>
+
+<ResponseField name="summary_variables" type="pybamm.SummaryVariables | None">
+  Cycle-level summary variables (capacity fade, energy throughput, etc.). Only populated when using a `pybamm.Experiment`.
+</ResponseField>
+
+<ResponseField name="all_inputs" type="list[dict]">
+  The input parameter dictionaries used across all sub-solutions.
+</ResponseField>
+
+<ResponseField name="first_state" type="pybamm.Solution">
+  A lightweight `Solution` containing only the first time point. Useful for initialising subsequent simulations.
+</ResponseField>
+
+<ResponseField name="last_state" type="pybamm.Solution">
+  A lightweight `Solution` containing only the final time point.
+</ResponseField>
+
+## Cycle and step access
+
+When running an experiment, you can drill into individual cycles and steps:
+
+```python
+sol = sim.solve()
+
+# Access the second cycle (0-indexed)
+cycle_2 = sol.cycles[1]
+
+# Access the first step of cycle 2
+step_1 = sol.cycles[1].steps[0]
+
+# Plot just one cycle
+cycle_2.plot()
+
+# Variable access works the same on sub-solutions
+print(cycle_2["Terminal voltage [V]"].entries)
+```
+
+## Summary variables
+
+After solving an experiment, `sol.summary_variables` gives cycle-level aggregate quantities:
+
+```python
+sol = sim.solve()
+
+print(sol.summary_variables["Capacity [A.h]"])
+print(sol.summary_variables["Energy [W.h]"])
+```
+
+Summary variables include discharge capacity, charge capacity, energy throughput, and (for lithium-ion) eSOH quantities such as loss of lithium inventory and loss of active material.
+
+## Plotting
+
+### `sol.plot()`
+
+Launch an interactive `pybamm.QuickPlot`:
+
+```python
+sol.plot(
+    output_variables=["Terminal voltage [V]", "Current [A]"]
+)
+```
+
+### `sol.plot_summary_variables()`
+
+Plot cycle-summary quantities as a function of cycle number:
+
+```python
+sol.plot_summary_variables()
+```
+
+<Note>
+  `plot_summary_variables()` is only available after solving an experiment.
+</Note>
+
+## Saving and loading
+
+```python
+import json
+
+# Save solution data to JSON
+data = {
+    "time": sol.t.tolist(),
+    "voltage": sol["Terminal voltage [V]"].entries.tolist(),
+}
+with open("result.json", "w") as f:
+    json.dump(data, f)
+
+# Or export to MATLAB .mat format
+sol.save_data("result.mat", ["Terminal voltage [V]", "Current [A]"])
+```
+
+## Examples
+
+<CodeGroup>
+
+```python Access results after a simple solve
+import pybamm
+import numpy as np
+
+model = pybamm.lithium_ion.SPM()
+sim = pybamm.Simulation(model)
+sol = sim.solve([0, 3600])
+
+t = sol.t                                      # times in seconds
+V = sol["Terminal voltage [V]"].entries        # voltages
+I = sol["Current [A]"].entries                 # currents
+T = sol["X-averaged cell temperature [K]"].entries
+
+print(f"Final voltage: {V[-1]:.4f} V")
+```
+
+```python Cycle-level access
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0 V", "Charge at 1C until 4.2 V")] * 5
+)
+sim = pybamm.Simulation(model, experiment=experiment)
+sol = sim.solve()
+
+for i, cycle in enumerate(sol.cycles):
+    V = cycle["Terminal voltage [V]"].entries
+    print(f"Cycle {i+1}: min V = {V.min():.3f} V, max V = {V.max():.3f} V")
+```
+
+```python Summary variables
+import pybamm
+import matplotlib.pyplot as plt
+
+model = pybamm.lithium_ion.SPM()
+experiment = pybamm.Experiment(
+    [("Discharge at 1C until 3.0 V", "Charge at 1C until 4.2 V")] * 20,
+    termination="80% capacity",
+)
+sim = pybamm.Simulation(model, experiment=experiment)
+sol = sim.solve()
+
+capacities = sol.summary_variables["Capacity [A.h]"]
+sol.plot_summary_variables()
+```
+
+```python Spatially resolved variable
+import pybamm
+
+model = pybamm.lithium_ion.DFN()
+sim = pybamm.Simulation(model)
+sol = sim.solve([0, 3600])
+
+# c_e has shape (n_x, n_times)
+c_e = sol["Electrolyte concentration [mol.m-3]"]
+print(c_e.entries.shape)
+print(c_e.x)   # spatial coordinates
+```
+
+</CodeGroup>
